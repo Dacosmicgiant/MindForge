@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mindforge",
+    "name": "MindForge",
     "slug": "mindforge",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,16 +8,21 @@
     "scheme": "mindforge",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#3B82F6"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mindforge.habittracker"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#3B82F6"
       },
-      "edgeToEdgeEnabled": true,
-      "package": "com.thecosmicgiant.mindforge"
+      "package": "com.mindforge.habittracker"
     },
     "web": {
       "bundler": "metro",
@@ -27,12 +32,11 @@
     "plugins": [
       "expo-router",
       [
-        "expo-splash-screen",
+        "expo-notifications",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "icon": "./assets/images/icon.png",
+          "color": "#3B82F6",
+          "sounds": []
         }
       ]
     ],
