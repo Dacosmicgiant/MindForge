@@ -1,100 +1,130 @@
 import { Tabs } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
+import { Platform, StatusBar } from 'react-native';
 import { Text } from 'react-native';
-
-// Tab Bar Icon Component
-function TabBarIcon({ name, color, size = 24 }) {
-  const icons = {
-    home: '🏠',
-    plus: '➕',
-    chart: '📊',
-    user: '👤',
-  };
-  
-  return (
-    <Text style={{ 
-      fontSize: size, 
-      color: color === '#3B82F6' ? color : '#6B7280' 
-    }}>
-      {icons[name] || '📱'}
-    </Text>
-  );
-}
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
+  
+  // Base height for tab bar content (without safe area)
+  const baseHeight = Platform.select({
+    ios: 60,
+    android: 70,
+    default: 70,
+  });
+  
   return (
     <>
-      <StatusBar style="dark" />
-      <Tabs
+      <StatusBar 
+        barStyle="dark-content" 
+        backgroundColor="#F9FAFB" 
+        translucent={false}
+      />
+      <Tabs 
         screenOptions={{
+          headerShown: false,
           tabBarActiveTintColor: '#3B82F6',
-          tabBarInactiveTintColor: '#6B7280',
+          tabBarInactiveTintColor: '#8E8E93',
           tabBarStyle: {
             backgroundColor: '#FFFFFF',
             borderTopWidth: 1,
             borderTopColor: '#E5E7EB',
-            paddingBottom: 8,
+            elevation: 8,
+            shadowOpacity: 0.1,
+            shadowOffset: { width: 0, height: -2 },
+            shadowRadius: 8,
+            shadowColor: '#000',
+            // Total height = base content + safe area for navigation buttons
+            height: baseHeight + insets.bottom,
+            // Push content up by safe area amount to avoid navigation overlap
+            paddingBottom: Math.max(insets.bottom, 8), 
             paddingTop: 8,
-            height: 70,
+            paddingHorizontal: 4,
+            // Ensure proper positioning
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
           },
           tabBarLabelStyle: {
             fontSize: 12,
             fontWeight: '500',
-            marginTop: 4,
+            marginBottom: Platform.OS === 'android' ? 4 : 0,
           },
-          headerStyle: {
-            backgroundColor: '#FFFFFF',
-            borderBottomWidth: 1,
-            borderBottomColor: '#E5E7EB',
+          tabBarIconStyle: {
+            marginTop: Platform.OS === 'android' ? 4 : 0,
           },
-          headerTitleStyle: {
-            fontSize: 20,
-            fontWeight: '600',
-            color: '#111827',
-          },
-          headerTintColor: '#3B82F6',
+          // Ensure tab bar doesn't overlap content and hides on keyboard
+          tabBarHideOnKeyboard: true,
         }}
       >
-        <Tabs.Screen
+        <Tabs.Screen 
           name="index"
           options={{
-            title: 'Today',
-            tabBarIcon: ({ color, size }) => (
-              <TabBarIcon name="home" color={color} size={size} />
+            tabBarIcon: ({ color, focused }) => (
+              <Text style={{ 
+                fontSize: 24, 
+                color: color,
+                opacity: focused ? 1 : 0.7 
+              }}>
+                🏠
+              </Text>
             ),
-            headerTitle: 'My Habits',
+            tabBarLabel: 'Today',
+            title: 'Today',
           }}
         />
-        <Tabs.Screen
+        
+        <Tabs.Screen 
           name="create"
           options={{
-            title: 'Create',
-            tabBarIcon: ({ color, size }) => (
-              <TabBarIcon name="plus" color={color} size={size} />
+            tabBarIcon: ({ color, focused }) => (
+              <Text style={{ 
+                fontSize: 24, 
+                color: color,
+                opacity: focused ? 1 : 0.7 
+              }}>
+                ➕
+              </Text>
             ),
-            headerTitle: 'Create New Habit',
+            tabBarLabel: 'Create',
+            title: 'Create',
           }}
         />
-        <Tabs.Screen
+        
+        <Tabs.Screen 
           name="progress"
           options={{
-            title: 'Progress',
-            tabBarIcon: ({ color, size }) => (
-              <TabBarIcon name="chart" color={color} size={size} />
+            tabBarIcon: ({ color, focused }) => (
+              <Text style={{ 
+                fontSize: 24, 
+                color: color,
+                opacity: focused ? 1 : 0.7 
+              }}>
+                📊
+              </Text>
             ),
-            headerTitle: 'Progress & Stats',
+            tabBarLabel: 'Progress',
+            title: 'Progress',
           }}
         />
-        <Tabs.Screen
+        
+        <Tabs.Screen 
           name="profile"
           options={{
-            title: 'Profile',
-            tabBarIcon: ({ color, size }) => (
-              <TabBarIcon name="user" color={color} size={size} />
+            tabBarIcon: ({ color, focused }) => (
+              <Text style={{ 
+                fontSize: 24, 
+                color: color,
+                opacity: focused ? 1 : 0.7 
+              }}>
+                👤
+              </Text>
             ),
-            headerTitle: 'Profile',
+            tabBarLabel: 'Profile',
+            title: 'Profile',
           }}
-        />
+        />        
       </Tabs>
     </>
   );

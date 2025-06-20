@@ -79,20 +79,10 @@ export default function SignupScreen() {
       });
 
       if (response.success) {
-        Alert.alert(
-          'Success!',
-          'Your account has been created successfully.',
-          [
-            {
-              text: 'Continue',
-              onPress: () => {
-                // TODO: Store auth token and navigate to main app
-                console.log('✅ Signup successful:', response.data);
-                router.replace('/');
-              }
-            }
-          ]
-        );
+        console.log('✅ Signup successful:', response.data);
+        // Token is automatically stored by the API service
+        // Redirect to main app
+        router.replace('/(tabs)');
       } else {
         Alert.alert(
           'Signup Failed',
@@ -115,7 +105,7 @@ export default function SignupScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }} edges={['bottom', 'left', 'right']}>
       <KeyboardAvoidingView 
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}

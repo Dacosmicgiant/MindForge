@@ -1,11 +1,11 @@
 import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
       <Stack
         screenOptions={{
           headerStyle: {
@@ -19,6 +19,8 @@ export default function RootLayout() {
           headerTintColor: '#3B82F6',
           headerShadowVisible: false,
           animation: 'slide_from_right',
+          // Ensure headers respect safe area
+          headerStatusBarHeight: 0,
         }}
       >
         <Stack.Screen
@@ -32,6 +34,12 @@ export default function RootLayout() {
           name="(auth)"
           options={{
             headerShown: false, // Auth group handles its own headers
+          }}
+        />
+        <Stack.Screen
+          name="(tabs)"
+          options={{
+            headerShown: false, // Tabs group handles its own headers
           }}
         />
         <Stack.Screen

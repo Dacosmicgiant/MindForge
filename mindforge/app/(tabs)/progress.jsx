@@ -51,28 +51,54 @@ export default function ProgressScreen() {
   ];
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F9FAFB' }} edges={['left', 'right']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F9FAFB' }} edges={['top', 'bottom', 'left', 'right']}>
       <ScrollView 
         style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 100 }} // Account for tab bar
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
+        {/* Internal Header - replaces removed tab header */}
+        <View style={{
+          backgroundColor: '#FFFFFF',
+          paddingHorizontal: 20,
+          paddingTop: 16,
+          paddingBottom: 20,
+          borderBottomWidth: 1,
+          borderBottomColor: '#E5E7EB',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+          elevation: 3,
+        }}>
+          <Text style={{
+            fontSize: 28,
+            fontWeight: 'bold',
+            color: '#111827',
+            marginBottom: 4,
+          }}>
+            Your Progress
+          </Text>
+          <Text style={{
+            fontSize: 16,
+            color: '#6B7280',
+          }}>
+            Track your habit journey and achievements
+          </Text>
+        </View>
+
         {/* Overview Stats */}
         <View style={{
           padding: 20,
           backgroundColor: '#FFFFFF',
-          marginBottom: 16,
+          marginTop: 16,
+          marginHorizontal: 16,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: '#E5E7EB',
         }}>
-          <Text style={{
-            fontSize: 24,
-            fontWeight: 'bold',
-            color: '#111827',
-            marginBottom: 20,
-          }}>
-            Your Progress
-          </Text>
-
           <View style={{
             flexDirection: 'row',
             flexWrap: 'wrap',

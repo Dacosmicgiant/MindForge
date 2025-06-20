@@ -66,20 +66,10 @@ export default function LoginScreen() {
       });
 
       if (response.success) {
-        Alert.alert(
-          'Welcome Back!',
-          'You have successfully signed in.',
-          [
-            {
-              text: 'Continue',
-              onPress: () => {
-                // TODO: Store auth token and navigate to main app
-                console.log('✅ Login successful:', response.data);
-                router.replace('/');
-              }
-            }
-          ]
-        );
+        console.log('✅ Login successful:', response.data);
+        // Token is automatically stored by the API service
+        // Redirect to main app
+        router.replace('/(tabs)');
       } else {
         Alert.alert(
           'Login Failed',
@@ -110,7 +100,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }} edges={['bottom', 'left', 'right']}>
       <KeyboardAvoidingView 
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}

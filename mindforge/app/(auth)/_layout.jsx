@@ -19,6 +19,8 @@ export default function AuthLayout() {
           headerShadowVisible: false,
           headerBackTitleVisible: false,
           animation: 'slide_from_right',
+          // Ensure headers respect safe area
+          headerStatusBarHeight: 0,
         }}
       >
         <Stack.Screen

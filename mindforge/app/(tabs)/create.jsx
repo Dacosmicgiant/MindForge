@@ -111,38 +111,48 @@ export default function CreateHabitScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F9FAFB' }} edges={['left', 'right']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F9FAFB' }} edges={['top', 'bottom', 'left', 'right']}>
       <KeyboardAvoidingView 
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView 
           style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: 40 }}
+          contentContainerStyle={{ paddingBottom: 140 }} // Account for tab bar + extra space
           keyboardShouldPersistTaps="handled"
         >
+          {/* Internal Header - replaces removed tab header */}
+          <View style={{
+            backgroundColor: '#FFFFFF',
+            paddingHorizontal: 20,
+            paddingTop: 16,
+            paddingBottom: 20,
+            borderBottomWidth: 1,
+            borderBottomColor: '#E5E7EB',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 4,
+            elevation: 3,
+          }}>
+            <Text style={{
+              fontSize: 28,
+              fontWeight: 'bold',
+              color: '#111827',
+              marginBottom: 4,
+            }}>
+              Create New Habit
+            </Text>
+            <Text style={{
+              fontSize: 16,
+              color: '#6B7280',
+            }}>
+              Start building a positive routine today
+            </Text>
+          </View>
+
           <View style={{ padding: 20 }}>
             
-            {/* Header */}
-            <View style={{
-              marginBottom: 32,
-            }}>
-              <Text style={{
-                fontSize: 24,
-                fontWeight: 'bold',
-                color: '#111827',
-                marginBottom: 8,
-              }}>
-                Create New Habit
-              </Text>
-              <Text style={{
-                fontSize: 16,
-                color: '#6B7280',
-              }}>
-                Start building a positive routine today
-              </Text>
-            </View>
-
             {/* Habit Name */}
             <FormSection title="Habit Name *">
               <TextInput

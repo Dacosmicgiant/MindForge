@@ -1,6 +1,8 @@
 // API Service for MindForge Backend Communication
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BACKEND_URL = "https://mindforge-41ld.onrender.com";
+const TOKEN_KEY = 'mindforge_auth_token';
 
 // API Configuration
 const API_CONFIG = {
@@ -9,6 +11,50 @@ const API_CONFIG = {
   headers: {
     'Content-Type': 'application/json',
   },
+};
+
+// Token Management
+export const tokenManager = {
+  // Store auth token
+  async storeToken(token) {
+    try {
+      await AsyncStorage.setItem(TOKEN_KEY, token);
+      console.log('✅ Token stored successfully');
+      return true;
+    } catch (error) {
+      console.error('❌ Error storing token:', error);
+      return false;
+    }
+  },
+
+  // Get stored auth token
+  async getToken() {
+    try {
+      const token = await AsyncStorage.getItem(TOKEN_KEY);
+      return token;
+    } catch (error) {
+      console.error('❌ Error getting token:', error);
+      return null;
+    }
+  },
+
+  // Remove auth token
+  async removeToken() {
+    try {
+      await AsyncStorage.removeItem(TOKEN_KEY);
+      console.log('✅ Token removed successfully');
+      return true;
+    } catch (error) {
+      console.error('❌ Error removing token:', error);
+      return false;
+    }
+  },
+
+  // Check if user is authenticated
+  async isAuthenticated() {
+    const token = await this.getToken();
+    return !!token;
+  }
 };
 
 // Helper function to create API requests
@@ -21,8 +67,8 @@ const apiRequest = async (endpoint, options = {}) => {
     ...options,
   };
 
-  // Add auth token if available (for future use)
-  const token = null; // TODO: Get from AsyncStorage
+  // Add auth token if available
+  const token = await tokenManager.getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -35,6 +81,11 @@ const apiRequest = async (endpoint, options = {}) => {
     console.log(`📡 Response Status: ${response.status}`);
     
     if (!response.ok) {
+      // Handle auth errors
+      if (response.status === 401) {
+        console.log('🔑 Authentication failed, removing token');
+        await tokenManager.removeToken();
+      }
       throw new Error(`API Error: ${response.status} ${response.statusText}`);
     }
     
@@ -59,20 +110,45 @@ export const api = {
   getServerInfo: () => apiRequest('/'),
   getAuthHealth: () => apiRequest('/api/auth/health'),
   
-  // Authentication (for future implementation)
-  signup: (userData) => apiRequest('/api/auth/signup', {
-    method: 'POST',
-    body: JSON.stringify(userData),
-  }),
+  // Authentication (with token management)
+  signup: async (userData) => {
+    const response = await apiRequest('/api/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    });
+    
+    // Store token on successful signup
+    if (response.success && response.data.token) {
+      await tokenManager.storeToken(response.data.token);
+    }
+    
+    return response;
+  },
   
-  login: (credentials) => apiRequest('/api/auth/login', {
-    method: 'POST',
-    body: JSON.stringify(credentials),
-  }),
+  login: async (credentials) => {
+    const response = await apiRequest('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(credentials),
+    });
+    
+    // Store token on successful login
+    if (response.success && response.data.token) {
+      await tokenManager.storeToken(response.data.token);
+    }
+    
+    return response;
+  },
   
-  logout: () => apiRequest('/api/auth/logout', {
-    method: 'POST',
-  }),
+  logout: async () => {
+    const response = await apiRequest('/api/auth/logout', {
+      method: 'POST',
+    });
+    
+    // Always remove token locally, even if API call fails
+    await tokenManager.removeToken();
+    
+    return response;
+  },
   
   getProfile: () => apiRequest('/api/auth/me'),
   

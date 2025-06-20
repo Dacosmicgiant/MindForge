@@ -38,26 +38,35 @@ export default function DashboardScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F9FAFB' }} edges={['left', 'right']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F9FAFB' }} edges={['top', 'bottom', 'left', 'right']}>
       <ScrollView 
         style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 100 }} // Account for tab bar
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* Header Section */}
+        {/* Internal Header - replaces removed tab header */}
         <View style={{
-          padding: 20,
           backgroundColor: '#FFFFFF',
-          marginBottom: 16,
+          paddingHorizontal: 20,
+          paddingTop: 16,
+          paddingBottom: 20,
+          borderBottomWidth: 1,
+          borderBottomColor: '#E5E7EB',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+          elevation: 3,
         }}>
           <Text style={{
-            fontSize: 24,
+            fontSize: 28,
             fontWeight: 'bold',
             color: '#111827',
-            marginBottom: 8,
+            marginBottom: 4,
           }}>
-            Good Morning! 👋
+            My Habits
           </Text>
           <Text style={{
             fontSize: 16,
@@ -76,6 +85,7 @@ export default function DashboardScreen() {
         <View style={{
           flexDirection: 'row',
           paddingHorizontal: 20,
+          marginTop: 16,
           marginBottom: 24,
           gap: 12,
         }}>
@@ -121,7 +131,7 @@ export default function DashboardScreen() {
         {/* Quick Actions */}
         <View style={{
           marginHorizontal: 20,
-          marginBottom: 40,
+          marginBottom: 20,
         }}>
           <Text style={{
             fontSize: 20,
