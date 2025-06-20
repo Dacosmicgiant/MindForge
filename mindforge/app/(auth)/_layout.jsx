@@ -1,11 +1,10 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-export default function RootLayout() {
+export default function AuthLayout() {
   return (
-    <SafeAreaProvider>
-      <StatusBar style="auto" />
+    <>
+      <StatusBar style="dark" />
       <Stack
         screenOptions={{
           headerStyle: {
@@ -18,30 +17,25 @@ export default function RootLayout() {
           },
           headerTintColor: '#3B82F6',
           headerShadowVisible: false,
+          headerBackTitleVisible: false,
           animation: 'slide_from_right',
         }}
       >
         <Stack.Screen
-          name="index"
+          name="signup"
           options={{
-            title: 'MindForge',
-            headerShown: false, // Hide header for welcome screen
+            title: 'Create Account',
+            headerShown: true,
           }}
         />
         <Stack.Screen
-          name="(auth)"
+          name="login"
           options={{
-            headerShown: false, // Auth group handles its own headers
-          }}
-        />
-        <Stack.Screen
-          name="+not-found"
-          options={{
-            title: 'Page Not Found',
+            title: 'Sign In',
             headerShown: true,
           }}
         />
       </Stack>
-    </SafeAreaProvider>
+    </>
   );
 }
