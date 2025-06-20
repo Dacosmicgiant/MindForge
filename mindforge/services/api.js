@@ -152,12 +152,42 @@ export const api = {
   
   getProfile: () => apiRequest('/api/auth/me'),
   
-  // Habits (for future implementation)
-  getHabits: () => apiRequest('/api/habits'),
+  // NEW: Update user profile
+  updateProfile: (profileData) => apiRequest('/api/auth/profile', {
+    method: 'PUT',
+    body: JSON.stringify(profileData),
+  }),
+  
+  // NEW: Change password
+  changePassword: (passwordData) => apiRequest('/api/auth/change-password', {
+    method: 'PUT',
+    body: JSON.stringify(passwordData),
+  }),
+  
+  // Habits
+  getHabits: (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    const endpoint = queryString ? `/api/habits?${queryString}` : '/api/habits';
+    return apiRequest(endpoint);
+  },
   
   createHabit: (habitData) => apiRequest('/api/habits', {
     method: 'POST',
     body: JSON.stringify(habitData),
+  }),
+  
+  // NEW: Get specific habit by ID
+  getHabitById: (habitId) => apiRequest(`/api/habits/${habitId}`),
+  
+  // NEW: Update habit
+  updateHabit: (habitId, habitData) => apiRequest(`/api/habits/${habitId}`, {
+    method: 'PUT',
+    body: JSON.stringify(habitData),
+  }),
+  
+  // NEW: Delete habit
+  deleteHabit: (habitId) => apiRequest(`/api/habits/${habitId}`, {
+    method: 'DELETE',
   }),
   
   markHabit: (habitId, markData) => apiRequest(`/api/habits/${habitId}/mark`, {
@@ -166,6 +196,12 @@ export const api = {
   }),
   
   getHabitProgress: (habitId, days = 7) => apiRequest(`/api/habits/${habitId}/progress?days=${days}`),
+  
+  // NEW: Archive/Unarchive habit
+  archiveHabit: (habitId, archive = true) => apiRequest(`/api/habits/${habitId}/archive`, {
+    method: 'PUT',
+    body: JSON.stringify({ archive }),
+  }),
   
   getHabitStats: () => apiRequest('/api/habits/stats'),
 };
