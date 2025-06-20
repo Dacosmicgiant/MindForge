@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
-import User from "../src/models/user.model.js";
-import Habit from "../src/models/habit.model.js";
+import User from "../models/user.model.js";
+import Habit from "../models/habit.model.js";
 
 dotenv.config();
 
