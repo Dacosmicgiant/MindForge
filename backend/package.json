@@ -4,8 +4,9 @@
   "description": "Backend API for Habit Tracker App",
   "main": "src/index.js",
   "scripts": {
-    "dev": "nodemon src/index.js",
+    "build": "echo 'No build step required for backend'",
     "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "echo \"Add linting here\"",
     "seed": "node scripts/seed.js"
@@ -20,13 +21,16 @@
   ],
   "type": "module",
   "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
-    "crypto": "^1.0.1",
     "dotenv": "^16.5.0",
-    "express": "^5.1.0",
+    "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.16.0"
   },
