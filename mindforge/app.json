@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "MindForge",
+    "name": "GoVibe",
     "slug": "mindforge",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -45,6 +45,9 @@
     "extra": {
       "router": {
         "origin": false
+      },
+      "eas": {
+        "projectId": "835ef256-b420-4470-927c-f5f8b0b30985"
       }
     }
   }
