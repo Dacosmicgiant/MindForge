@@ -1,4 +1,4 @@
-// services/notifications.js - Working Notification Service
+// services/notifications.js - Fixed with Working Trigger Formats
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform, Alert } from 'react-native';
@@ -12,7 +12,7 @@ Notifications.setNotificationHandler({
     shouldShowBanner: true,
     shouldShowList: true,
     shouldPlaySound: true,
-    shouldSetBadge: true,
+    shouldSetBadge: false,
   }),
 });
 
@@ -20,6 +20,8 @@ export class NotificationService {
   constructor() {
     this.isInitialized = false;
     this.notificationToken = null;
+    this.notificationListeners = [];
+    this.scheduledNotificationIds = new Set(); // Track our scheduled notifications
   }
 
   // Initialize notification service
@@ -39,6 +41,9 @@ export class NotificationService {
         return false;
       }
 
+      // Clean up any existing listeners first
+      this.cleanupListeners();
+
       // Set up notification listeners
       this.setupNotificationListeners();
 
@@ -49,6 +54,17 @@ export class NotificationService {
     } catch (error) {
       console.error('❌ Error initializing notification service:', error);
       return false;
+    }
+  }
+
+  // Clean up existing listeners to prevent duplicates
+  cleanupListeners() {
+    if (this.notificationListeners.length > 0) {
+      console.log('🧹 Cleaning up existing notification listeners');
+      this.notificationListeners.forEach(listener => {
+        listener.remove();
+      });
+      this.notificationListeners = [];
     }
   }
 
@@ -63,6 +79,8 @@ export class NotificationService {
         finalStatus = status;
       }
 
+      console.log('🔐 Notification permission status:', finalStatus);
+
       if (finalStatus !== 'granted') {
         Alert.alert(
           'Notification Permission',
@@ -74,13 +92,15 @@ export class NotificationService {
 
       // Configure notification channel for Android
       if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('habit-reminders', {
+        await Notifications.setNotificationChannelAsync('default', {
           name: 'Habit Reminders',
           importance: Notifications.AndroidImportance.HIGH,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#3B82F6',
           sound: true,
+          enableVibrate: true,
         });
+        console.log('✅ Android notification channel configured');
       }
 
       return true;
@@ -93,22 +113,41 @@ export class NotificationService {
   // Set up notification event listeners
   setupNotificationListeners() {
     // Handle notification received while app is in foreground
-    Notifications.addNotificationReceivedListener(notification => {
-      console.log('🔔 Notification received:', notification);
+    const receivedListener = Notifications.addNotificationReceivedListener(notification => {
+      console.log('🔔 Notification received:', notification.request.content.title);
     });
 
     // Handle notification tapped by user
-    Notifications.addNotificationResponseReceivedListener(response => {
-      console.log('👆 Notification tapped:', response);
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('👆 Notification tapped:', response.notification.request.content.title);
       const data = response.notification.request.content.data;
       
       if (data.habitId) {
         console.log('Navigate to habit:', data.habitId);
+        // TODO: Add navigation logic here
       }
     });
+
+    // Store listeners for cleanup
+    this.notificationListeners = [receivedListener, responseListener];
   }
 
-  // SIMPLIFIED: Schedule notification with daily repetition
+  // FIXED: Calculate next daily occurrence for a given time
+  calculateNextDailyTime(hours, minutes) {
+    const now = new Date();
+    const nextOccurrence = new Date();
+    
+    nextOccurrence.setHours(hours, minutes, 0, 0);
+    
+    // If the time has already passed today, schedule for tomorrow
+    if (nextOccurrence <= now) {
+      nextOccurrence.setDate(nextOccurrence.getDate() + 1);
+    }
+    
+    return nextOccurrence;
+  }
+
+  // FIXED: Schedule habit reminder using WORKING trigger format
   async scheduleHabitReminder(habit) {
     try {
       if (!this.isInitialized) {
@@ -132,7 +171,16 @@ export class NotificationService {
       // Cancel existing notification for this habit first
       await this.cancelHabitReminder(habit._id);
 
-      // Schedule daily notification using the simplest working approach
+      // Calculate next occurrence
+      const nextTime = this.calculateNextDailyTime(hours, minutes);
+      const secondsUntil = Math.floor((nextTime - new Date()) / 1000);
+
+      console.log(`📅 Scheduling habit reminder for "${habit.name}"`);
+      console.log(`🕐 Target time: ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`);
+      console.log(`📅 Next occurrence: ${nextTime.toLocaleString()}`);
+      console.log(`⏱️ Seconds until: ${secondsUntil}`);
+
+      // Use the WORKING trigger format: { type: 'timeInterval', seconds: X }
       const notificationId = await Notifications.scheduleNotificationAsync({
         content: {
           title: '🎯 Habit Reminder',
@@ -140,29 +188,107 @@ export class NotificationService {
           data: {
             habitId: habit._id,
             habitName: habit.name,
-            type: 'habit_reminder'
+            type: 'habit_reminder',
+            scheduledTime: habit.reminderTime,
+            scheduledFor: nextTime.toISOString(),
           },
           sound: true,
           priority: Notifications.AndroidImportance.HIGH,
         },
         trigger: {
-          hour: hours,
-          minute: minutes,
-          repeats: true,
+          type: 'timeInterval',
+          seconds: Math.max(60, secondsUntil), // At least 60 seconds from now
         },
       });
 
-      // Store notification mapping
-      await this.storeNotificationMapping(habit._id, notificationId);
+      // Track this notification ID
+      this.scheduledNotificationIds.add(notificationId);
 
-      console.log(`✅ Scheduled daily reminder for "${habit.name}" at ${habit.reminderTime}`);
+      // Store notification mapping
+      await this.storeNotificationMapping(habit._id, notificationId, {
+        scheduledTime: habit.reminderTime,
+        nextOccurrence: nextTime.toISOString(),
+        habitName: habit.name
+      });
+
+      console.log(`✅ Scheduled habit reminder for "${habit.name}"`);
       console.log(`📋 Notification ID: ${notificationId}`);
+      
+      // Verify the notification was actually scheduled
+      const verification = await this.verifyNotificationScheduled(notificationId);
+      if (verification.found) {
+        console.log(`✅ Verification: Notification is properly scheduled`);
+        
+        // Schedule the next day's notification after this one fires
+        this.scheduleNextDayReminder(habit, nextTime);
+        
+      } else {
+        console.log(`⚠️ Verification failed: Notification may not be scheduled properly`);
+        this.scheduledNotificationIds.delete(notificationId);
+      }
       
       return notificationId;
 
     } catch (error) {
       console.error('❌ Error scheduling habit reminder:', error);
       return null;
+    }
+  }
+
+  // Schedule the next day's reminder (to simulate daily repetition)
+  async scheduleNextDayReminder(habit, currentTime) {
+    try {
+      const nextDay = new Date(currentTime);
+      nextDay.setDate(nextDay.getDate() + 1);
+      const secondsUntil = Math.floor((nextDay - new Date()) / 1000);
+
+      console.log(`📅 Pre-scheduling next day for "${habit.name}" at ${nextDay.toLocaleString()}`);
+
+      const nextDayId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '🎯 Habit Reminder',
+          body: `Time for: ${habit.name}`,
+          data: {
+            habitId: habit._id,
+            habitName: habit.name,
+            type: 'habit_reminder',
+            scheduledTime: habit.reminderTime,
+            scheduledFor: nextDay.toISOString(),
+            isNextDay: true,
+          },
+          sound: true,
+          priority: Notifications.AndroidImportance.HIGH,
+        },
+        trigger: {
+          type: 'timeInterval',
+          seconds: secondsUntil,
+        },
+      });
+
+      this.scheduledNotificationIds.add(nextDayId);
+      console.log(`✅ Pre-scheduled next day reminder: ${nextDayId}`);
+
+      return nextDayId;
+    } catch (error) {
+      console.error('❌ Error scheduling next day reminder:', error);
+      return null;
+    }
+  }
+
+  // ADDED: Verify notification was actually scheduled
+  async verifyNotificationScheduled(notificationId) {
+    try {
+      const allScheduled = await Notifications.getAllScheduledNotificationsAsync();
+      const found = allScheduled.find(n => n.identifier === notificationId);
+      
+      return {
+        found: !!found,
+        notification: found,
+        totalScheduled: allScheduled.length
+      };
+    } catch (error) {
+      console.error('❌ Error verifying notification:', error);
+      return { found: false, totalScheduled: 0 };
     }
   }
 
@@ -174,10 +300,12 @@ export class NotificationService {
       if (notificationId) {
         await Notifications.cancelScheduledNotificationAsync(notificationId);
         await this.removeNotificationMapping(habitId);
+        this.scheduledNotificationIds.delete(notificationId);
         console.log(`✅ Cancelled reminder for habit: ${habitId}`);
+        return true;
       }
 
-      return true;
+      return false;
     } catch (error) {
       console.error('❌ Error cancelling habit reminder:', error);
       return false;
@@ -187,9 +315,10 @@ export class NotificationService {
   // Update habit reminder
   async updateHabitReminder(habit) {
     try {
+      console.log(`🔄 Updating reminder for habit: ${habit.name}`);
       await this.cancelHabitReminder(habit._id);
       
-      if (habit.reminderTime) {
+      if (habit.reminderTime && habit.isActive && !habit.isArchived) {
         return await this.scheduleHabitReminder(habit);
       }
       
@@ -206,26 +335,45 @@ export class NotificationService {
       console.log('🔄 Starting to schedule habit reminders...');
       
       const results = [];
-      const habitsWithReminders = habits.filter(h => h.reminderTime && h.isActive && !h.isArchived);
+      const habitsWithReminders = habits.filter(h => 
+        h.reminderTime && 
+        h.isActive && 
+        !h.isArchived &&
+        h.reminderTime.trim() !== ''
+      );
       
-      console.log(`📋 Found ${habitsWithReminders.length} habits with reminders to schedule`);
+      console.log(`📋 Found ${habitsWithReminders.length} habits with valid reminders`);
+      
+      if (habitsWithReminders.length === 0) {
+        console.log('📋 No habits to schedule');
+        return [];
+      }
       
       for (const habit of habitsWithReminders) {
         console.log(`⏰ Scheduling: ${habit.name} at ${habit.reminderTime}`);
+        
         const notificationId = await this.scheduleHabitReminder(habit);
         if (notificationId) {
-          results.push({ habitId: habit._id, notificationId });
+          results.push({ 
+            habitId: habit._id, 
+            habitName: habit.name,
+            notificationId,
+            scheduledTime: habit.reminderTime
+          });
+          console.log(`✅ Successfully scheduled: ${habit.name}`);
+        } else {
+          console.log(`❌ Failed to schedule: ${habit.name}`);
         }
         
         // Small delay between scheduling
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
       
-      console.log(`✅ Successfully scheduled ${results.length} habit reminders`);
+      console.log(`✅ Scheduling complete: ${results.length}/${habitsWithReminders.length} successful`);
       
-      // Verify what's actually scheduled
-      const scheduled = await this.getScheduledNotifications();
-      console.log(`📊 Total scheduled notifications: ${scheduled.length}`);
+      // Final verification
+      const finalVerification = await this.getScheduledNotifications();
+      console.log(`📊 Final verification: ${finalVerification.length} total scheduled notifications`);
       
       return results;
     } catch (error) {
@@ -234,45 +382,90 @@ export class NotificationService {
     }
   }
 
-  // Cancel all habit reminders
+  // Cancel all habit reminders with complete cleanup
   async cancelAllHabitReminders() {
     try {
       console.log('🧹 Cancelling all habit reminders...');
       
-      // Get all stored mappings
+      // Method 1: Cancel stored mappings
       const mappings = await this.getNotificationMappings();
+      let cancelledFromMappings = 0;
       
-      // Cancel each one individually
-      for (const [habitId, notificationId] of Object.entries(mappings)) {
+      for (const [habitId, data] of Object.entries(mappings)) {
         try {
+          const notificationId = typeof data === 'string' ? data : data.notificationId;
           await Notifications.cancelScheduledNotificationAsync(notificationId);
-          console.log(`✅ Cancelled notification ${notificationId} for habit ${habitId}`);
+          this.scheduledNotificationIds.delete(notificationId);
+          cancelledFromMappings++;
+          console.log(`✅ Cancelled stored notification for habit: ${habitId}`);
         } catch (error) {
-          console.log(`⚠️ Could not cancel notification ${notificationId}:`, error.message);
+          console.log(`⚠️ Could not cancel stored notification:`, error.message);
         }
       }
       
-      // Clear storage
-      await AsyncStorage.removeItem(NOTIFICATION_STORAGE_KEY);
+      // Method 2: Cancel all habit-related notifications by content
+      const allScheduled = await Notifications.getAllScheduledNotificationsAsync();
+      let cancelledByContent = 0;
       
-      console.log('✅ Cancelled all habit reminders');
-      return true;
+      for (const notification of allScheduled) {
+        if (notification.content.data?.type === 'habit_reminder' || 
+            notification.content.title?.includes('Habit Reminder')) {
+          try {
+            await Notifications.cancelScheduledNotificationAsync(notification.identifier);
+            this.scheduledNotificationIds.delete(notification.identifier);
+            cancelledByContent++;
+            console.log(`✅ Cancelled habit notification: ${notification.identifier}`);
+          } catch (error) {
+            console.log(`⚠️ Could not cancel notification ${notification.identifier}:`, error.message);
+          }
+        }
+      }
+      
+      // Clear storage and tracking
+      await AsyncStorage.removeItem(NOTIFICATION_STORAGE_KEY);
+      this.scheduledNotificationIds.clear();
+      
+      const totalCancelled = cancelledFromMappings + cancelledByContent;
+      console.log(`✅ Cleanup complete: ${totalCancelled} notifications cancelled`);
+      
+      // Final verification
+      const remaining = await Notifications.getAllScheduledNotificationsAsync();
+      console.log(`📊 Remaining notifications: ${remaining.length}`);
+      
+      return {
+        success: true,
+        cancelledFromMappings,
+        cancelledByContent,
+        totalCancelled,
+        remainingCount: remaining.length
+      };
+      
     } catch (error) {
       console.error('❌ Error cancelling all reminders:', error);
-      return false;
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
 
-  // Send immediate notification (for testing or completion celebrations)
+  // Send immediate notification (for testing)
   async sendImmediateNotification(title, body, data = {}) {
     try {
-      if (!this.isInitialized) return null;
+      if (!this.isInitialized) {
+        console.log('⚠️ Service not initialized, cannot send notification');
+        return null;
+      }
 
       const notificationId = await Notifications.scheduleNotificationAsync({
         content: {
           title,
           body,
-          data,
+          data: {
+            ...data,
+            timestamp: new Date().toISOString(),
+            type: 'immediate'
+          },
           sound: true,
         },
         trigger: null, // Send immediately
@@ -286,33 +479,57 @@ export class NotificationService {
     }
   }
 
-  // Test notification with specific time (for debugging)
-  async sendTestScheduledNotification(minutesFromNow = 1) {
+  // FIXED: Test scheduled notification using WORKING trigger format
+  async sendTestScheduledNotification(minutesFromNow = 2) {
     try {
-      if (!this.isInitialized) return null;
+      if (!this.isInitialized) {
+        console.log('⚠️ Service not initialized');
+        return null;
+      }
+
+      if (minutesFromNow < 1) {
+        console.log('⚠️ Cannot schedule notification for less than 1 minute');
+        return null;
+      }
 
       const testTime = new Date();
       testTime.setMinutes(testTime.getMinutes() + minutesFromNow);
+      const secondsUntil = minutesFromNow * 60;
 
+      console.log(`📅 Scheduling test notification for ${testTime.toLocaleString()}`);
+      console.log(`⏱️ Seconds until fire: ${secondsUntil}`);
+
+      // Use WORKING trigger format
       const notificationId = await Notifications.scheduleNotificationAsync({
         content: {
           title: '🧪 Test Scheduled Notification',
-          body: `This test notification was scheduled for ${testTime.toLocaleTimeString()}`,
-          data: { type: 'test_scheduled' },
+          body: `This test was scheduled for ${testTime.toLocaleTimeString()}. If you see this at the right time, scheduling works perfectly!`,
+          data: { 
+            type: 'test_scheduled',
+            scheduledFor: testTime.toISOString(),
+            testId: Date.now()
+          },
           sound: true,
         },
         trigger: {
-          seconds: minutesFromNow * 60,
+          type: 'timeInterval',
+          seconds: secondsUntil,
         },
       });
 
       console.log(`✅ Scheduled test notification for ${minutesFromNow} minute(s) from now`);
       console.log(`📋 Test notification ID: ${notificationId}`);
       
+      // Verify it was scheduled
+      const verification = await this.verifyNotificationScheduled(notificationId);
+      console.log(`📊 Test notification verification:`, verification);
+      
       return {
         notificationId,
         scheduledTime: testTime.toLocaleTimeString(),
-        scheduledFor: `${minutesFromNow} minute(s) from now`
+        scheduledFor: `${minutesFromNow} minute(s) from now`,
+        verified: verification.found,
+        willFireAt: testTime.toISOString()
       };
     } catch (error) {
       console.error('❌ Error sending test scheduled notification:', error);
@@ -366,12 +583,18 @@ export class NotificationService {
     }
   }
 
-  // Store notification ID mapping
-  async storeNotificationMapping(habitId, notificationId) {
+  // Store notification ID mapping with metadata
+  async storeNotificationMapping(habitId, notificationId, metadata = {}) {
     try {
       const mappings = await this.getNotificationMappings();
-      mappings[habitId] = notificationId;
+      mappings[habitId] = {
+        notificationId,
+        ...metadata,
+        storedAt: new Date().toISOString()
+      };
+      
       await AsyncStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify(mappings));
+      console.log(`💾 Stored notification mapping: ${habitId} -> ${notificationId}`);
     } catch (error) {
       console.error('❌ Error storing notification mapping:', error);
     }
@@ -383,6 +606,7 @@ export class NotificationService {
       const mappings = await this.getNotificationMappings();
       delete mappings[habitId];
       await AsyncStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify(mappings));
+      console.log(`🗑️ Removed notification mapping for habit: ${habitId}`);
     } catch (error) {
       console.error('❌ Error removing notification mapping:', error);
     }
@@ -402,20 +626,54 @@ export class NotificationService {
   // Get notification ID for habit
   async getNotificationId(habitId) {
     const mappings = await this.getNotificationMappings();
-    return mappings[habitId] || null;
+    const mapping = mappings[habitId];
+    
+    // Handle both old string format and new object format
+    if (typeof mapping === 'string') {
+      return mapping;
+    } else if (mapping && mapping.notificationId) {
+      return mapping.notificationId;
+    }
+    
+    return null;
   }
 
-  // Get scheduled notifications with detailed logging
+  // Get scheduled notifications with detailed analysis
   async getScheduledNotifications() {
     try {
       const notifications = await Notifications.getAllScheduledNotificationsAsync();
       
-      console.log(`📅 Scheduled notifications: ${notifications.length}`);
+      console.log(`📅 Currently scheduled notifications: ${notifications.length}`);
       
-      // Log details for debugging
+      // Categorize and log details
+      let habitNotifications = 0;
+      let testNotifications = 0;
+      let otherNotifications = 0;
+      
       notifications.forEach((notif, index) => {
-        console.log(`📅 ${index + 1}. "${notif.content.title}" - Trigger:`, notif.trigger);
+        const trigger = notif.trigger;
+        const data = notif.content.data || {};
+        
+        console.log(`📅 ${index + 1}. "${notif.content.title}"`);
+        console.log(`     📋 ID: ${notif.identifier}`);
+        console.log(`     ⏰ Trigger:`, trigger);
+        console.log(`     📊 Data:`, data);
+        
+        if (trigger.type === 'timeInterval' && trigger.seconds) {
+          const fireTime = new Date(Date.now() + (trigger.seconds * 1000));
+          console.log(`     ⏱️ Will fire at: ${fireTime.toLocaleString()}`);
+        } else if (trigger.type === 'date' && trigger.value) {
+          const fireTime = new Date(trigger.value);
+          console.log(`     📅 Will fire at: ${fireTime.toLocaleString()}`);
+        }
+        
+        // Categorize
+        if (data.type === 'habit_reminder') habitNotifications++;
+        else if (data.type?.includes('test')) testNotifications++;
+        else otherNotifications++;
       });
+      
+      console.log(`📊 Summary: ${habitNotifications} habit reminders, ${testNotifications} test notifications, ${otherNotifications} other`);
       
       return notifications;
     } catch (error) {
@@ -424,18 +682,25 @@ export class NotificationService {
     }
   }
 
-  // Check notification settings
+  // Check notification settings and system status
   async getNotificationSettings() {
     try {
       const permissions = await Notifications.getPermissionsAsync();
       const scheduledNotifications = await this.getScheduledNotifications();
+      const mappings = await this.getNotificationMappings();
       
       return {
         permissions: permissions.status,
         canAskAgain: permissions.canAskAgain,
         scheduledCount: scheduledNotifications.length,
-        token: this.notificationToken,
+        habitNotificationCount: scheduledNotifications.filter(n => 
+          n.content.data?.type === 'habit_reminder'
+        ).length,
+        storedMappings: Object.keys(mappings).length,
+        trackedNotifications: this.scheduledNotificationIds.size,
         initialized: this.isInitialized,
+        platform: Platform.OS,
+        isDevice: Device.isDevice,
       };
     } catch (error) {
       console.error('❌ Error getting notification settings:', error);
@@ -443,22 +708,44 @@ export class NotificationService {
     }
   }
 
-  // Debug function to check what's scheduled
-  async debugScheduledNotifications() {
-    console.log('🔍 DEBUG: Checking scheduled notifications...');
-    const notifications = await this.getScheduledNotifications();
+  // Complete system diagnostic
+  async debugNotificationSystem() {
+    console.log('🔍 DEBUG: Running complete notification system diagnostic...');
     
-    notifications.forEach((notif, index) => {
-      console.log(`🔍 DEBUG ${index + 1}:`, {
-        id: notif.identifier,
-        title: notif.content.title,
-        body: notif.content.body,
-        trigger: notif.trigger,
-        data: notif.content.data
+    try {
+      const permissions = await Notifications.getPermissionsAsync();
+      const scheduled = await this.getScheduledNotifications();
+      const mappings = await this.getNotificationMappings();
+      
+      console.log('🔍 DEBUG: System status:', {
+        initialized: this.isInitialized,
+        permissions: permissions.status,
+        platform: Platform.OS,
+        isDevice: Device.isDevice,
+        scheduledCount: scheduled.length,
+        mappingCount: Object.keys(mappings).length,
+        trackedCount: this.scheduledNotificationIds.size
       });
-    });
-    
-    return notifications;
+      
+      console.log('🔍 DEBUG: Stored mappings:', mappings);
+      console.log('🔍 DEBUG: Tracked notification IDs:', Array.from(this.scheduledNotificationIds));
+      
+      return {
+        permissions,
+        scheduled,
+        mappings,
+        systemStatus: {
+          initialized: this.isInitialized,
+          platform: Platform.OS,
+          isDevice: Device.isDevice,
+          trackedNotifications: this.scheduledNotificationIds.size
+        }
+      };
+      
+    } catch (error) {
+      console.error('🔍 DEBUG: Error during diagnostic:', error);
+      return { error: error.message };
+    }
   }
 }
 

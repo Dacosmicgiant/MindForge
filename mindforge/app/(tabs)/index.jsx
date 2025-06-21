@@ -1,4 +1,4 @@
-// mindforge/app/(tabs)/index.jsx - Fixed version to prevent multiple scheduling
+// mindforge/app/(tabs)/index.jsx - Production Ready Dashboard
 import { 
   Text, 
   View, 
@@ -23,13 +23,11 @@ export default function DashboardScreen() {
   const [error, setError] = useState(null);
   const [notificationsReady, setNotificationsReady] = useState(false);
   const [notificationSettings, setNotificationSettings] = useState(null);
-  const [notificationsInitialized, setNotificationsInitialized] = useState(false); // Track if notifications are already set up
+  const [notificationsInitialized, setNotificationsInitialized] = useState(false);
 
   // Fetch all dashboard data
   const fetchDashboardData = useCallback(async () => {
     try {
-      console.log('🔄 Fetching dashboard data...');
-      
       // Fetch user profile, habits, and stats concurrently
       const [profileResponse, habitsResponse, statsResponse] = await Promise.all([
         api.getProfile(),
@@ -40,19 +38,16 @@ export default function DashboardScreen() {
       // Handle user profile
       if (profileResponse.success) {
         setUserData(profileResponse.data.user);
-        console.log('✅ Profile loaded');
       }
 
       // Handle habits
       if (habitsResponse.success) {
         setHabits(habitsResponse.data.habits || []);
-        console.log('✅ Habits loaded:', habitsResponse.data.habits?.length || 0);
       }
 
       // Handle stats
       if (statsResponse.success) {
         setStats(statsResponse.data.stats || {});
-        console.log('✅ Stats loaded');
       }
 
       // Clear any previous errors
@@ -68,12 +63,10 @@ export default function DashboardScreen() {
   useEffect(() => {
     const initNotifications = async () => {
       if (notificationsInitialized) {
-        console.log('ℹ️ Notifications already initialized, skipping...');
         return;
       }
 
       try {
-        console.log('🔔 Initializing notifications for the first time...');
         const isReady = await notificationService.initialize();
         setNotificationsReady(isReady);
         
@@ -84,7 +77,6 @@ export default function DashboardScreen() {
         // Mark as initialized to prevent future initializations
         setNotificationsInitialized(true);
         
-        console.log('✅ One-time notification initialization complete');
       } catch (error) {
         console.error('❌ Error initializing notifications:', error);
       }
@@ -105,19 +97,12 @@ export default function DashboardScreen() {
         const habitsWithReminders = habits.filter(h => h.reminderTime && h.isActive && !h.isArchived);
         
         if (habitsWithReminders.length > 0) {
-          console.log('🔄 Syncing notifications with habits (one-time)...');
-          
-          // Clear any duplicate notifications first
-          await notificationService.clearDuplicateNotifications();
-          
           // Schedule all reminders
           await notificationService.scheduleAllHabitReminders(habits);
           
           // Refresh notification settings
           const settings = await notificationService.getNotificationSettings();
           setNotificationSettings(settings);
-          
-          console.log('✅ Notifications synced successfully');
         }
       } catch (error) {
         console.error('❌ Error syncing notifications:', error);
@@ -140,7 +125,7 @@ export default function DashboardScreen() {
     loadDashboard();
   }, [fetchDashboardData]);
 
-  // Pull to refresh - DON'T re-sync notifications
+  // Pull to refresh
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchDashboardData();
@@ -161,17 +146,13 @@ export default function DashboardScreen() {
   // Toggle habit completion with notification integration
   const handleToggleHabit = async (habitId, currentStatus) => {
     try {
-      console.log(`🔄 Toggling habit ${habitId}, current status:`, currentStatus);
-      
       const response = await api.markHabit(habitId, {
         completed: !currentStatus,
-        date: new Date().toISOString().split('T')[0], // Today's date
+        date: new Date().toISOString().split('T')[0],
         notes: ''
       });
 
       if (response.success) {
-        console.log('✅ Habit toggled successfully');
-        
         const updatedHabit = response.data.habit;
         const habit = habits.find(h => h._id === habitId);
         
@@ -199,7 +180,7 @@ export default function DashboardScreen() {
             const newStreak = updatedHabit.streak || 0;
             const previousStreak = habit.streak || 0;
             
-            // Only notify if we hit a new milestone (not if going backwards)
+            // Only notify if we hit a new milestone
             if (newStreak > previousStreak && [7, 14, 30, 50, 100].includes(newStreak)) {
               await notifyStreak(habit, newStreak);
             }
@@ -216,7 +197,6 @@ export default function DashboardScreen() {
         }
 
       } else {
-        console.error('❌ Failed to toggle habit:', response.error);
         Alert.alert(
           'Error',
           'Failed to update habit. Please try again.',
@@ -226,7 +206,7 @@ export default function DashboardScreen() {
     } catch (error) {
       console.error('❌ Error toggling habit:', error);
       Alert.alert(
-        'Error',
+        'Connection Error',
         'Unable to update habit. Please check your connection.',
         [{ text: 'OK' }]
       );
@@ -312,7 +292,7 @@ export default function DashboardScreen() {
     );
   }
 
-  // Notification sync status component - FIXED to not trigger scheduling
+  // Notification sync status component
   function NotificationSyncStatus() {
     const [syncStatus, setSyncStatus] = useState('checking');
 
@@ -443,6 +423,7 @@ export default function DashboardScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
+        showsVerticalScrollIndicator={false}
       >
         {/* Enhanced Header with Personalized Greeting */}
         <View style={{
@@ -653,6 +634,35 @@ export default function DashboardScreen() {
                 onPress={handleViewProgress}
               />
             </View>
+          </View>
+        )}
+
+        {/* Motivational Footer */}
+        {habits.length > 0 && (
+          <View style={{
+            marginHorizontal: 20,
+            marginBottom: 20,
+            backgroundColor: '#F0F9FF',
+            padding: 16,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: '#BFDBFE',
+          }}>
+            <Text style={{
+              fontSize: 14,
+              color: '#1E40AF',
+              textAlign: 'center',
+              fontStyle: 'italic',
+            }}>
+              {getTodayCompletionRate() === 100 ? 
+                "🎉 Amazing! You've completed all your habits today!" :
+                getTodayCompletionRate() >= 80 ?
+                "🌟 You're doing great! Keep up the excellent work!" :
+                getTodayCompletionRate() >= 50 ?
+                "💪 Good progress! You're more than halfway there!" :
+                "🚀 Every small step counts. You've got this!"
+              }
+            </Text>
           </View>
         )}
       </ScrollView>
@@ -873,7 +883,7 @@ function EmptyHabitsState({ onCreateHabit }) {
         marginBottom: 8,
         textAlign: 'center',
       }}>
-        No habits yet!
+        Ready to build great habits?
       </Text>
       <Text style={{
         fontSize: 14,
@@ -882,7 +892,7 @@ function EmptyHabitsState({ onCreateHabit }) {
         marginBottom: 20,
         lineHeight: 20,
       }}>
-        Start building better habits today.{'\n'}
+        Start your journey to a better you.{'\n'}
         Create your first habit to get started.
       </Text>
       <TouchableOpacity

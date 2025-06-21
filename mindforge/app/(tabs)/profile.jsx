@@ -1,4 +1,4 @@
-// mindforge/app/(tabs)/profile.jsx - Complete version with notification integration
+// mindforge/app/(tabs)/profile.jsx - Production Ready Profile Screen
 import { 
   Text, 
   View, 
@@ -52,8 +52,6 @@ export default function ProfileScreen() {
   // Fetch all profile data
   const fetchProfileData = useCallback(async () => {
     try {
-      console.log('🔄 Fetching profile data...');
-      
       const [profileResponse, habitsResponse, statsResponse] = await Promise.all([
         api.getProfile(),
         api.getHabits(),
@@ -67,9 +65,8 @@ export default function ProfileScreen() {
           name: user.name || '',
           profilePicture: user.profilePicture || ''
         });
-        console.log('✅ Profile loaded');
       } else {
-        console.error('❌ Failed to fetch profile:', profileResponse.error);
+        console.error('Failed to fetch profile:', profileResponse.error);
         setUserData({
           name: 'User',
           email: 'user@example.com',
@@ -79,16 +76,14 @@ export default function ProfileScreen() {
 
       if (habitsResponse.success) {
         setHabits(habitsResponse.data.habits || []);
-        console.log('✅ Habits loaded for management');
       }
 
       if (statsResponse.success) {
         setStats(statsResponse.data.stats || {});
-        console.log('✅ Stats loaded');
       }
 
     } catch (error) {
-      console.error('❌ Error fetching profile data:', error);
+      console.error('Error fetching profile data:', error);
       setUserData({
         name: 'User',
         email: 'user@example.com',
@@ -103,7 +98,7 @@ export default function ProfileScreen() {
       const settings = await notificationService.getNotificationSettings();
       setNotificationSettings(settings);
     } catch (error) {
-      console.error('❌ Error loading notification settings:', error);
+      console.error('Error loading notification settings:', error);
     }
   }, []);
 
@@ -150,7 +145,7 @@ export default function ProfileScreen() {
         Alert.alert('Error', response.error || 'Failed to update profile');
       }
     } catch (error) {
-      console.error('❌ Update profile error:', error);
+      console.error('Update profile error:', error);
       Alert.alert('Error', 'Unable to update profile. Please try again.');
     } finally {
       setEditLoading(false);
@@ -190,7 +185,7 @@ export default function ProfileScreen() {
         Alert.alert('Error', response.error || 'Failed to update habit');
       }
     } catch (error) {
-      console.error('❌ Archive habit error:', error);
+      console.error('Archive habit error:', error);
       Alert.alert('Error', 'Unable to update habit. Please try again.');
     }
   };
@@ -228,7 +223,7 @@ export default function ProfileScreen() {
                 Alert.alert('Error', response.error || 'Failed to delete habit');
               }
             } catch (error) {
-              console.error('❌ Delete habit error:', error);
+              console.error('Delete habit error:', error);
               Alert.alert('Error', 'Unable to delete habit. Please try again.');
             }
           }
@@ -274,7 +269,7 @@ export default function ProfileScreen() {
         );
       }
     } catch (error) {
-      console.error('❌ Error sending test notification:', error);
+      console.error('Error sending test notification:', error);
       Alert.alert('Error', 'Failed to send test notification');
     } finally {
       setNotificationLoading(false);
@@ -304,7 +299,7 @@ export default function ProfileScreen() {
               // Refresh notification settings
               await loadNotificationSettings();
             } catch (error) {
-              console.error('❌ Error syncing notifications:', error);
+              console.error('Error syncing notifications:', error);
               Alert.alert('Error', 'Failed to sync notifications. Please try again.');
             } finally {
               setNotificationLoading(false);
@@ -334,7 +329,7 @@ export default function ProfileScreen() {
               // Refresh notification settings
               await loadNotificationSettings();
             } catch (error) {
-              console.error('❌ Error clearing notifications:', error);
+              console.error('Error clearing notifications:', error);
               Alert.alert('Error', 'Failed to clear notifications');
             } finally {
               setNotificationLoading(false);
@@ -437,7 +432,7 @@ export default function ProfileScreen() {
     return achievements;
   };
 
-  // Export user data
+  // Export user data (placeholder for future implementation)
   const handleExportData = () => {
     Alert.alert(
       'Export Data',
@@ -457,40 +452,6 @@ export default function ProfileScreen() {
     );
   };
 
-  // Clear all data
-  const handleClearData = () => {
-    Alert.alert(
-      'Clear All Data',
-      'This will permanently delete ALL your habits and progress. This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear All',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Final Confirmation',
-              'Are you absolutely sure? This will delete everything.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Yes, Delete All',
-                  style: 'destructive',
-                  onPress: () => {
-                    Alert.alert(
-                      'Data Clearing',
-                      'Bulk data deletion will be available in the next update. For now, you can delete habits individually.'
-                    );
-                  }
-                }
-              ]
-            );
-          }
-        }
-      ]
-    );
-  };
-
   const handleLogout = () => {
     Alert.alert(
       'Logout',
@@ -502,12 +463,10 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              console.log('🔄 Logging out...');
               await api.logout();
-              console.log('✅ Logout successful');
               router.replace('/');
             } catch (error) {
-              console.error('❌ Logout error:', error);
+              console.error('Logout error:', error);
               await tokenManager.removeToken();
               router.replace('/');
             }
@@ -741,7 +700,7 @@ export default function ProfileScreen() {
           />
         </View>
 
-        {/* Data & Privacy */}
+        {/* Settings & Privacy */}
         <View style={styles.menuContainer}>
           <Text style={styles.sectionTitle}>Settings & Privacy</Text>
           
@@ -767,14 +726,6 @@ export default function ProfileScreen() {
             title="Export Data"
             subtitle="Download your habit data"
             onPress={() => setShowDataExport(true)}
-          />
-          
-          <MenuItem
-            icon="🗑️"
-            title="Clear All Data"
-            subtitle="Reset your account"
-            onPress={handleClearData}
-            danger
           />
         </View>
 
@@ -891,66 +842,35 @@ export default function ProfileScreen() {
           
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
             
-            {/* Status Card */}
-            <View style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: 12,
-              padding: 20,
-              marginBottom: 20,
-              borderWidth: 1,
-              borderColor: '#E5E7EB',
-            }}>
-              <Text style={{
-                fontSize: 18,
-                fontWeight: '600',
-                color: '#111827',
-                marginBottom: 16,
-              }}>
-                Current Status
-              </Text>
+            {/* Status Overview */}
+            <View style={styles.notificationStatusCard}>
+              <Text style={styles.notificationCardTitle}>Current Status</Text>
               
               {notificationSettings && (
                 <>
-                  <View style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: 8,
-                  }}>
-                    <Text style={{ fontSize: 14, color: '#6B7280' }}>Permission Status</Text>
-                    <Text style={{
-                      fontSize: 14,
-                      fontWeight: '500',
-                      color: notificationSettings.permissions === 'granted' ? '#10B981' : '#EF4444',
-                      textTransform: 'capitalize',
-                    }}>
+                  <View style={styles.statusRow}>
+                    <Text style={styles.statusLabel}>Permission Status</Text>
+                    <Text style={[
+                      styles.statusValue,
+                      { color: notificationSettings.permissions === 'granted' ? '#10B981' : '#EF4444' }
+                    ]}>
                       {notificationSettings.permissions}
                     </Text>
                   </View>
                   
-                  <View style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: 8,
-                  }}>
-                    <Text style={{ fontSize: 14, color: '#6B7280' }}>Active Reminders</Text>
-                    <Text style={{ fontSize: 14, fontWeight: '500', color: '#374151' }}>
+                  <View style={styles.statusRow}>
+                    <Text style={styles.statusLabel}>Active Reminders</Text>
+                    <Text style={styles.statusValue}>
                       {notificationSettings.scheduledCount}
                     </Text>
                   </View>
                   
-                  <View style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}>
-                    <Text style={{ fontSize: 14, color: '#6B7280' }}>Service Status</Text>
-                    <Text style={{
-                      fontSize: 14,
-                      fontWeight: '500',
-                      color: notificationSettings.initialized ? '#10B981' : '#EF4444',
-                    }}>
+                  <View style={styles.statusRow}>
+                    <Text style={styles.statusLabel}>Service Status</Text>
+                    <Text style={[
+                      styles.statusValue,
+                      { color: notificationSettings.initialized ? '#10B981' : '#EF4444' }
+                    ]}>
                       {notificationSettings.initialized ? 'Ready' : 'Not Ready'}
                     </Text>
                   </View>
@@ -959,87 +879,44 @@ export default function ProfileScreen() {
             </View>
 
             {/* Quick Actions */}
-            <View style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: 12,
-              padding: 20,
-              marginBottom: 20,
-              borderWidth: 1,
-              borderColor: '#E5E7EB',
-            }}>
-              <Text style={{
-                fontSize: 18,
-                fontWeight: '600',
-                color: '#111827',
-                marginBottom: 16,
-              }}>
-                Quick Actions
-              </Text>
+            <View style={styles.notificationStatusCard}>
+              <Text style={styles.notificationCardTitle}>Quick Actions</Text>
               
               <TouchableOpacity
-                style={[
-                  styles.notificationActionButton,
-                  notificationLoading && { opacity: 0.5 }
-                ]}
+                style={[styles.notificationActionButton, notificationLoading && { opacity: 0.5 }]}
                 onPress={handleTestNotification}
                 disabled={notificationLoading}
               >
-                <Text style={{ fontSize: 20, marginRight: 12 }}>🧪</Text>
+                <Text style={styles.actionIcon}>🧪</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 16, fontWeight: '500', color: '#111827' }}>
-                    Send Test Notification
-                  </Text>
-                  <Text style={{ fontSize: 12, color: '#6B7280' }}>
-                    Check if notifications are working
-                  </Text>
+                  <Text style={styles.actionTitle}>Send Test Notification</Text>
+                  <Text style={styles.actionSubtitle}>Check if notifications are working</Text>
                 </View>
                 {notificationLoading && <ActivityIndicator size="small" color="#6B7280" />}
               </TouchableOpacity>
               
               <TouchableOpacity
-                style={[
-                  styles.notificationActionButton,
-                  notificationLoading && { opacity: 0.5 }
-                ]}
+                style={[styles.notificationActionButton, notificationLoading && { opacity: 0.5 }]}
                 onPress={handleSyncNotifications}
                 disabled={notificationLoading}
               >
-                <Text style={{ fontSize: 20, marginRight: 12 }}>🔄</Text>
+                <Text style={styles.actionIcon}>🔄</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 16, fontWeight: '500', color: '#111827' }}>
-                    Sync All Reminders
-                  </Text>
-                  <Text style={{ fontSize: 12, color: '#6B7280' }}>
-                    Update all habit reminders
-                  </Text>
+                  <Text style={styles.actionTitle}>Sync All Reminders</Text>
+                  <Text style={styles.actionSubtitle}>Update all habit reminders</Text>
                 </View>
                 {notificationLoading && <ActivityIndicator size="small" color="#6B7280" />}
               </TouchableOpacity>
               
               <TouchableOpacity
-                style={[
-                  {
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    padding: 12,
-                    backgroundColor: '#FEF2F2',
-                    borderRadius: 8,
-                    borderWidth: 1,
-                    borderColor: '#FECACA',
-                  },
-                  notificationLoading && { opacity: 0.5 }
-                ]}
+                style={[styles.clearButton, notificationLoading && { opacity: 0.5 }]}
                 onPress={handleClearNotifications}
                 disabled={notificationLoading}
               >
-                <Text style={{ fontSize: 20, marginRight: 12 }}>🗑️</Text>
+                <Text style={styles.actionIcon}>🗑️</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 16, fontWeight: '500', color: '#DC2626' }}>
-                    Clear All Reminders
-                  </Text>
-                  <Text style={{ fontSize: 12, color: '#B91C1C' }}>
-                    Cancel all scheduled notifications
-                  </Text>
+                  <Text style={styles.clearTitle}>Clear All Reminders</Text>
+                  <Text style={styles.clearSubtitle}>Cancel all scheduled notifications</Text>
                 </View>
                 {notificationLoading && <ActivityIndicator size="small" color="#DC2626" />}
               </TouchableOpacity>
@@ -1047,56 +924,16 @@ export default function ProfileScreen() {
 
             {/* Habits with Reminders */}
             {habits.filter(h => h.reminderTime).length > 0 && (
-              <View style={{
-                backgroundColor: '#FFFFFF',
-                borderRadius: 12,
-                padding: 20,
-                borderWidth: 1,
-                borderColor: '#E5E7EB',
-              }}>
-                <Text style={{
-                  fontSize: 18,
-                  fontWeight: '600',
-                  color: '#111827',
-                  marginBottom: 16,
-                }}>
-                  Habits with Reminders
-                </Text>
+              <View style={styles.notificationStatusCard}>
+                <Text style={styles.notificationCardTitle}>Habits with Reminders</Text>
                 
                 {habits
                   .filter(h => h.reminderTime && !h.isArchived)
                   .map((habit, index) => (
-                    <View
-                      key={habit._id}
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        paddingVertical: 8,
-                        borderBottomWidth: index < habits.filter(h => h.reminderTime && !h.isArchived).length - 1 ? 1 : 0,
-                        borderBottomColor: '#F3F4F6',
-                      }}
-                    >
-                      <View style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: 4,
-                        backgroundColor: habit.color || '#3B82F6',
-                        marginRight: 8,
-                      }} />
-                      <Text style={{
-                        fontSize: 14,
-                        color: '#374151',
-                        flex: 1,
-                      }}>
-                        {habit.name}
-                      </Text>
-                      <Text style={{
-                        fontSize: 12,
-                        color: '#6B7280',
-                        fontWeight: '500',
-                      }}>
-                        🔔 {habit.reminderTime}
-                      </Text>
+                    <View key={habit._id} style={styles.habitReminderRow}>
+                      <View style={[styles.habitDot, { backgroundColor: habit.color || '#3B82F6' }]} />
+                      <Text style={styles.habitReminderName}>{habit.name}</Text>
+                      <Text style={styles.habitReminderTime}>🔔 {habit.reminderTime}</Text>
                     </View>
                   ))}
               </View>
@@ -1428,7 +1265,34 @@ const styles = {
     color: '#111827',
   },
   
-  // Notification action button
+  // Notification styles
+  notificationStatusCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  notificationCardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 16,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  statusLabel: { fontSize: 14, color: '#6B7280' },
+  statusValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    textTransform: 'capitalize',
+  },
   notificationActionButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1437,6 +1301,30 @@ const styles = {
     borderRadius: 8,
     marginBottom: 12,
   },
+  clearButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  actionIcon: { fontSize: 20, marginRight: 12 },
+  actionTitle: { fontSize: 16, fontWeight: '500', color: '#111827' },
+  actionSubtitle: { fontSize: 12, color: '#6B7280' },
+  clearTitle: { fontSize: 16, fontWeight: '500', color: '#DC2626' },
+  clearSubtitle: { fontSize: 12, color: '#B91C1C' },
+  habitReminderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  habitDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
+  habitReminderName: { fontSize: 14, color: '#374151', flex: 1 },
+  habitReminderTime: { fontSize: 12, color: '#6B7280', fontWeight: '500' },
   
   // Habit management styles
   habitCard: {
@@ -1449,7 +1337,6 @@ const styles = {
   },
   habitCardHeader: { marginBottom: 12 },
   habitCardInfo: { flexDirection: 'row', alignItems: 'center' },
-  habitDot: { width: 12, height: 12, borderRadius: 6, marginRight: 8 },
   habitName: { fontSize: 16, fontWeight: '500', color: '#111827', flex: 1 },
   archivedBadge: {
     backgroundColor: '#F3F4F6',
