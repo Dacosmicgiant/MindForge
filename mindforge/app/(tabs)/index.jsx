@@ -1,4 +1,4 @@
-// mindforge/app/(tabs)/index.jsx - Production Ready Dashboard
+// mindforge/app/(tabs)/index.jsx - Production Ready Dashboard - FINAL FIXED VERSION
 import { 
   Text, 
   View, 
@@ -6,7 +6,8 @@ import {
   TouchableOpacity, 
   RefreshControl,
   ActivityIndicator,
-  Alert
+  Alert,
+  Platform
 } from "react-native";
 import { useState, useEffect, useCallback } from "react";
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -67,6 +68,7 @@ export default function DashboardScreen() {
       }
 
       try {
+        console.log('🔔 Dashboard: Initializing notifications...');
         const isReady = await notificationService.initialize();
         setNotificationsReady(isReady);
         
@@ -76,6 +78,7 @@ export default function DashboardScreen() {
         
         // Mark as initialized to prevent future initializations
         setNotificationsInitialized(true);
+        console.log('✅ Dashboard: Notifications initialized');
         
       } catch (error) {
         console.error('❌ Error initializing notifications:', error);
@@ -85,35 +88,27 @@ export default function DashboardScreen() {
     initNotifications();
   }, []); // Empty dependency array - only run once
 
-  // Sync notifications with habits ONLY when habits change significantly
+  // Load notification settings when ready (DO NOT AUTO-SCHEDULE)
   useEffect(() => {
-    const syncNotifications = async () => {
-      if (!notificationsReady || !notificationsInitialized || habits.length === 0) {
+    const loadNotificationSettings = async () => {
+      if (!notificationsReady || !notificationsInitialized) {
         return;
       }
 
       try {
-        // Only sync if we have habits with reminder times
-        const habitsWithReminders = habits.filter(h => h.reminderTime && h.isActive && !h.isArchived);
-        
-        if (habitsWithReminders.length > 0) {
-          // Schedule all reminders
-          await notificationService.scheduleAllHabitReminders(habits);
-          
-          // Refresh notification settings
-          const settings = await notificationService.getNotificationSettings();
-          setNotificationSettings(settings);
-        }
+        console.log('📊 Dashboard: Loading notification settings...');
+        const settings = await notificationService.getNotificationSettings();
+        setNotificationSettings(settings);
       } catch (error) {
-        console.error('❌ Error syncing notifications:', error);
+        console.error('❌ Error loading notification settings:', error);
       }
     };
 
-    // Only sync once when habits are first loaded
-    if (habits.length > 0 && notificationsReady && !loading) {
-      syncNotifications();
+    // ONLY load settings, do NOT auto-schedule
+    if (notificationsReady && notificationsInitialized) {
+      loadNotificationSettings();
     }
-  }, [habits.length, notificationsReady, loading]); // Only trigger when habits count changes
+  }, [notificationsReady, notificationsInitialized]);
 
   // Initial load
   useEffect(() => {
@@ -292,9 +287,10 @@ export default function DashboardScreen() {
     );
   }
 
-  // Notification sync status component
+  // Notification sync status component with manual control
   function NotificationSyncStatus() {
     const [syncStatus, setSyncStatus] = useState('checking');
+    const [syncLoading, setSyncLoading] = useState(false);
 
     useEffect(() => {
       const checkSync = async () => {
@@ -320,6 +316,38 @@ export default function DashboardScreen() {
         checkSync();
       }
     }, [habits, notificationsReady, notificationSettings]);
+
+    const handleManualSync = async () => {
+      setSyncLoading(true);
+      try {
+        console.log('🔄 Manual sync initiated from dashboard');
+        
+        // Clear all existing notifications first
+        await notificationService.cancelAllHabitReminders();
+        
+        // Schedule fresh notifications
+        const results = await notificationService.scheduleAllHabitReminders(habits);
+        
+        // Refresh notification settings
+        const settings = await notificationService.getNotificationSettings();
+        setNotificationSettings(settings);
+        
+        setSyncStatus('synced');
+        
+        Alert.alert(
+          'Sync Complete! ✅',
+          `Scheduled ${results.length} fresh habit reminder${results.length !== 1 ? 's' : ''}.`,
+          [{ text: 'OK' }]
+        );
+        
+      } catch (error) {
+        console.error('❌ Error manual sync:', error);
+        Alert.alert('Error', 'Failed to sync notifications. Please try again.');
+        setSyncStatus('needs_sync');
+      } finally {
+        setSyncLoading(false);
+      }
+    };
 
     const getStatusInfo = () => {
       switch (syncStatus) {
@@ -365,36 +393,31 @@ export default function DashboardScreen() {
           {habitsWithReminders.length} habit{habitsWithReminders.length !== 1 ? 's' : ''} with reminders
         </Text>
         
-        {/* Manual sync button for needs_sync status */}
-        {syncStatus === 'needs_sync' && (
+        {/* Manual sync button */}
+        {(syncStatus === 'needs_sync' || syncStatus === 'synced') && notificationSettings?.permissions === 'granted' && (
           <TouchableOpacity
             style={{
-              backgroundColor: '#F59E0B',
+              backgroundColor: syncStatus === 'needs_sync' ? '#F59E0B' : '#10B981',
               paddingHorizontal: 8,
               paddingVertical: 4,
               borderRadius: 4,
               marginTop: 4,
+              opacity: syncLoading ? 0.7 : 1,
             }}
-            onPress={async () => {
-              try {
-                setSyncStatus('syncing');
-                await notificationService.scheduleAllHabitReminders(habits);
-                const settings = await notificationService.getNotificationSettings();
-                setNotificationSettings(settings);
-                setSyncStatus('synced');
-              } catch (error) {
-                console.error('❌ Error manual sync:', error);
-                setSyncStatus('needs_sync');
-              }
-            }}
+            onPress={handleManualSync}
+            disabled={syncLoading}
           >
-            <Text style={{
-              fontSize: 10,
-              color: '#FFFFFF',
-              fontWeight: '500',
-            }}>
-              Sync Now
-            </Text>
+            {syncLoading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={{
+                fontSize: 10,
+                color: '#FFFFFF',
+                fontWeight: '500',
+              }}>
+                {syncStatus === 'needs_sync' ? 'Sync Now' : 'Re-sync'}
+              </Text>
+            )}
           </TouchableOpacity>
         )}
       </View>
