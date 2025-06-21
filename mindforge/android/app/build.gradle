@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.thecosmicgiant.mindforge'
+    namespace 'com.mindforge.habittracker'
     defaultConfig {
-        applicationId 'com.thecosmicgiant.mindforge'
+        applicationId 'com.mindforge.habittracker'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

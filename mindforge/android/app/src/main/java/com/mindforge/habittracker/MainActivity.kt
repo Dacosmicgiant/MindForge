@@ -1,4 +1,4 @@
-package com.thecosmicgiant.mindforge
+package com.mindforge.habittracker
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

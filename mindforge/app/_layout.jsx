@@ -1,8 +1,33 @@
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { notificationService } from '../services/notifications';
 
 export default function RootLayout() {
+  // Initialize notifications when app starts
+  useEffect(() => {
+    const initializeApp = async () => {
+      try {
+        console.log('🚀 Initializing MindForge app...');
+        
+        // Initialize notification service
+        const notificationSuccess = await notificationService.initialize();
+        
+        if (notificationSuccess) {
+          console.log('✅ Notifications initialized successfully');
+        } else {
+          console.log('⚠️ Notifications not available or permission denied');
+        }
+        
+      } catch (error) {
+        console.error('❌ Error initializing app:', error);
+      }
+    };
+
+    initializeApp();
+  }, []);
+
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />

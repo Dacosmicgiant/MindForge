@@ -1,3 +1,4 @@
+// mindforge/app/(tabs)/profile.jsx - Complete version with notification integration
 import { 
   Text, 
   View, 
@@ -8,12 +9,14 @@ import {
   Modal,
   TextInput,
   Switch,
-  RefreshControl
+  RefreshControl,
+  Platform
 } from "react-native";
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
 import { api, tokenManager } from '../../services/api';
+import { notificationService } from '../../services/notifications';
 
 export default function ProfileScreen() {
   const [userData, setUserData] = useState(null);
@@ -28,6 +31,7 @@ export default function ProfileScreen() {
   const [showAchievements, setShowAchievements] = useState(false);
   const [showDataExport, setShowDataExport] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   
   // Edit form states
   const [editForm, setEditForm] = useState({ name: '', profilePicture: '' });
@@ -40,6 +44,10 @@ export default function ProfileScreen() {
     streakReminders: true,
     motivationalQuotes: false
   });
+
+  // Notification states
+  const [notificationSettings, setNotificationSettings] = useState(null);
+  const [notificationLoading, setNotificationLoading] = useState(false);
 
   // Fetch all profile data
   const fetchProfileData = useCallback(async () => {
@@ -89,20 +97,36 @@ export default function ProfileScreen() {
     }
   }, []);
 
+  // Load notification settings
+  const loadNotificationSettings = useCallback(async () => {
+    try {
+      const settings = await notificationService.getNotificationSettings();
+      setNotificationSettings(settings);
+    } catch (error) {
+      console.error('❌ Error loading notification settings:', error);
+    }
+  }, []);
+
   useEffect(() => {
     const loadProfile = async () => {
       setLoading(true);
-      await fetchProfileData();
+      await Promise.all([
+        fetchProfileData(),
+        loadNotificationSettings()
+      ]);
       setLoading(false);
     };
     loadProfile();
-  }, [fetchProfileData]);
+  }, [fetchProfileData, loadNotificationSettings]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchProfileData();
+    await Promise.all([
+      fetchProfileData(),
+      loadNotificationSettings()
+    ]);
     setRefreshing(false);
-  }, [fetchProfileData]);
+  }, [fetchProfileData, loadNotificationSettings]);
 
   // Update profile
   const handleUpdateProfile = async () => {
@@ -151,10 +175,16 @@ export default function ProfileScreen() {
           `Habit ${!isArchived ? 'archived' : 'unarchived'} successfully`
         );
         
-        // Refresh stats
+        // Refresh stats and sync notifications
         const statsResponse = await api.getHabitStats();
         if (statsResponse.success) {
           setStats(statsResponse.data.stats || {});
+        }
+
+        // Re-sync notifications since habit status changed
+        if (notificationSettings?.initialized) {
+          await notificationService.scheduleAllHabitReminders(habits);
+          await loadNotificationSettings();
         }
       } else {
         Alert.alert('Error', response.error || 'Failed to update habit');
@@ -177,23 +207,137 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              // Cancel notification first
+              if (notificationSettings?.initialized) {
+                await notificationService.cancelHabitReminder(habitId);
+              }
+
               const response = await api.deleteHabit(habitId);
               
               if (response.success) {
                 setHabits(prev => prev.filter(habit => habit._id !== habitId));
                 Alert.alert('Success', 'Habit deleted successfully');
                 
-                // Refresh stats
+                // Refresh stats and notification settings
                 const statsResponse = await api.getHabitStats();
                 if (statsResponse.success) {
                   setStats(statsResponse.data.stats || {});
                 }
+                await loadNotificationSettings();
               } else {
                 Alert.alert('Error', response.error || 'Failed to delete habit');
               }
             } catch (error) {
               console.error('❌ Delete habit error:', error);
               Alert.alert('Error', 'Unable to delete habit. Please try again.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Test notification
+  const handleTestNotification = async () => {
+    setNotificationLoading(true);
+    try {
+      const success = await notificationService.sendImmediateNotification(
+        '🎯 Test Notification',
+        'This is a test notification from MindForge! Your notifications are working correctly.',
+        { type: 'test' }
+      );
+
+      if (success) {
+        Alert.alert(
+          'Test Sent! 🎉',
+          'Check your notification area to see if the test notification appeared. If you don\'t see it, check your notification permissions.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          'Test Failed',
+          'Unable to send test notification. Please check your notification permissions in Settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Check Settings',
+              onPress: () => {
+                Alert.alert(
+                  'Enable Notifications',
+                  Platform.OS === 'ios' 
+                    ? 'Go to Settings > Notifications > MindForge and turn on notifications.'
+                    : 'Go to Settings > Apps > MindForge > Notifications and enable notifications.'
+                );
+              }
+            }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('❌ Error sending test notification:', error);
+      Alert.alert('Error', 'Failed to send test notification');
+    } finally {
+      setNotificationLoading(false);
+    }
+  };
+
+  // Sync all notifications
+  const handleSyncNotifications = async () => {
+    Alert.alert(
+      'Sync Notifications',
+      'This will update all your habit reminders based on current settings. Any existing reminders will be replaced.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sync Now',
+          onPress: async () => {
+            setNotificationLoading(true);
+            try {
+              const result = await notificationService.scheduleAllHabitReminders(habits);
+              
+              Alert.alert(
+                'Sync Complete! ✅',
+                `Updated ${result.length} habit reminder${result.length !== 1 ? 's' : ''}.\n\nActive reminders: ${result.length}`,
+                [{ text: 'OK' }]
+              );
+              
+              // Refresh notification settings
+              await loadNotificationSettings();
+            } catch (error) {
+              console.error('❌ Error syncing notifications:', error);
+              Alert.alert('Error', 'Failed to sync notifications. Please try again.');
+            } finally {
+              setNotificationLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Clear all notifications
+  const handleClearNotifications = async () => {
+    Alert.alert(
+      'Clear All Notifications',
+      'This will cancel all scheduled habit reminders. You can re-enable them later by syncing again.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear All',
+          style: 'destructive',
+          onPress: async () => {
+            setNotificationLoading(true);
+            try {
+              await notificationService.cancelAllHabitReminders();
+              Alert.alert('Success', 'All habit reminders cleared successfully');
+              
+              // Refresh notification settings
+              await loadNotificationSettings();
+            } catch (error) {
+              console.error('❌ Error clearing notifications:', error);
+              Alert.alert('Error', 'Failed to clear notifications');
+            } finally {
+              setNotificationLoading(false);
             }
           }
         }
@@ -252,6 +396,17 @@ export default function ProfileScreen() {
         title: 'Consistency Champion',
         description: 'Achieved 80%+ weekly completion',
         icon: '⭐',
+        unlocked: true
+      });
+    }
+
+    // Notification-related achievements
+    if (notificationSettings?.permissions === 'granted' && notificationSettings?.scheduledCount > 0) {
+      achievements.push({
+        id: 'notification_master',
+        title: 'Reminder Master',
+        description: 'Set up habit notifications',
+        icon: '🔔',
         unlocked: true
       });
     }
@@ -362,6 +517,127 @@ export default function ProfileScreen() {
     );
   };
 
+  // Notification status card component
+  function NotificationStatusCard() {
+    if (!notificationSettings) return null;
+
+    const getStatusColor = () => {
+      if (notificationSettings.permissions === 'granted') return '#10B981';
+      if (notificationSettings.permissions === 'denied') return '#EF4444';
+      return '#F59E0B';
+    };
+
+    const getStatusText = () => {
+      if (notificationSettings.permissions === 'granted') {
+        return `✅ Enabled • ${notificationSettings.scheduledCount} reminders active`;
+      }
+      if (notificationSettings.permissions === 'denied') {
+        return '🔕 Disabled • No reminders will be sent';
+      }
+      return '⚠️ Unknown status';
+    };
+
+    return (
+      <View style={{
+        backgroundColor: '#FFFFFF',
+        marginHorizontal: 20,
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+      }}>
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          marginBottom: 12,
+        }}>
+          <View style={{
+            width: 12,
+            height: 12,
+            borderRadius: 6,
+            backgroundColor: getStatusColor(),
+            marginRight: 8,
+          }} />
+          <Text style={{
+            fontSize: 16,
+            fontWeight: '600',
+            color: '#111827',
+            flex: 1,
+          }}>
+            Notifications
+          </Text>
+          <TouchableOpacity
+            style={{
+              backgroundColor: '#F3F4F6',
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 4,
+            }}
+            onPress={() => setShowNotificationSettings(true)}
+          >
+            <Text style={{
+              fontSize: 12,
+              color: '#374151',
+              fontWeight: '500',
+            }}>
+              Manage
+            </Text>
+          </TouchableOpacity>
+        </View>
+        
+        <Text style={{
+          fontSize: 14,
+          color: '#6B7280',
+          marginBottom: 8,
+        }}>
+          {getStatusText()}
+        </Text>
+
+        {notificationSettings.permissions !== 'granted' && (
+          <TouchableOpacity
+            style={{
+              backgroundColor: '#FEF2F2',
+              padding: 8,
+              borderRadius: 6,
+              borderWidth: 1,
+              borderColor: '#FECACA',
+            }}
+            onPress={() => {
+              Alert.alert(
+                'Enable Notifications',
+                'To receive habit reminders, please enable notifications in your device Settings.',
+                [
+                  { text: 'Later', style: 'cancel' },
+                  { 
+                    text: 'How to Enable',
+                    onPress: () => {
+                      Alert.alert(
+                        'Enable Notifications',
+                        Platform.OS === 'ios' 
+                          ? 'Go to Settings > Notifications > MindForge and turn on notifications.'
+                          : 'Go to Settings > Apps > MindForge > Notifications and enable notifications.'
+                      );
+                    }
+                  }
+                ]
+              );
+            }}
+          >
+            <Text style={{
+              fontSize: 12,
+              color: '#DC2626',
+              textAlign: 'center',
+              fontWeight: '500',
+            }}>
+              🔔 Tap for instructions to enable notifications
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
@@ -414,6 +690,9 @@ export default function ProfileScreen() {
           </Text>
         </View>
 
+        {/* Notification Status Card */}
+        <NotificationStatusCard />
+
         {/* Key Stats */}
         <View style={styles.statsContainer}>
           <StatCard
@@ -464,7 +743,17 @@ export default function ProfileScreen() {
 
         {/* Data & Privacy */}
         <View style={styles.menuContainer}>
-          <Text style={styles.sectionTitle}>Data & Privacy</Text>
+          <Text style={styles.sectionTitle}>Settings & Privacy</Text>
+          
+          <MenuItem
+            icon="🔔"
+            title="Notification Settings"
+            subtitle={notificationSettings ? 
+              `${notificationSettings.scheduledCount} reminders • ${notificationSettings.permissions}` : 
+              'Loading...'
+            }
+            onPress={() => setShowNotificationSettings(true)}
+          />
           
           <MenuItem
             icon="⚙️"
@@ -589,6 +878,233 @@ export default function ProfileScreen() {
         </SafeAreaView>
       </Modal>
 
+      {/* Notification Settings Modal */}
+      <Modal visible={showNotificationSettings} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#F9FAFB' }}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setShowNotificationSettings(false)}>
+              <Text style={styles.modalCancel}>Close</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Notification Settings</Text>
+            <View style={{ width: 50 }} />
+          </View>
+          
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
+            
+            {/* Status Card */}
+            <View style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: 12,
+              padding: 20,
+              marginBottom: 20,
+              borderWidth: 1,
+              borderColor: '#E5E7EB',
+            }}>
+              <Text style={{
+                fontSize: 18,
+                fontWeight: '600',
+                color: '#111827',
+                marginBottom: 16,
+              }}>
+                Current Status
+              </Text>
+              
+              {notificationSettings && (
+                <>
+                  <View style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 8,
+                  }}>
+                    <Text style={{ fontSize: 14, color: '#6B7280' }}>Permission Status</Text>
+                    <Text style={{
+                      fontSize: 14,
+                      fontWeight: '500',
+                      color: notificationSettings.permissions === 'granted' ? '#10B981' : '#EF4444',
+                      textTransform: 'capitalize',
+                    }}>
+                      {notificationSettings.permissions}
+                    </Text>
+                  </View>
+                  
+                  <View style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 8,
+                  }}>
+                    <Text style={{ fontSize: 14, color: '#6B7280' }}>Active Reminders</Text>
+                    <Text style={{ fontSize: 14, fontWeight: '500', color: '#374151' }}>
+                      {notificationSettings.scheduledCount}
+                    </Text>
+                  </View>
+                  
+                  <View style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}>
+                    <Text style={{ fontSize: 14, color: '#6B7280' }}>Service Status</Text>
+                    <Text style={{
+                      fontSize: 14,
+                      fontWeight: '500',
+                      color: notificationSettings.initialized ? '#10B981' : '#EF4444',
+                    }}>
+                      {notificationSettings.initialized ? 'Ready' : 'Not Ready'}
+                    </Text>
+                  </View>
+                </>
+              )}
+            </View>
+
+            {/* Quick Actions */}
+            <View style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: 12,
+              padding: 20,
+              marginBottom: 20,
+              borderWidth: 1,
+              borderColor: '#E5E7EB',
+            }}>
+              <Text style={{
+                fontSize: 18,
+                fontWeight: '600',
+                color: '#111827',
+                marginBottom: 16,
+              }}>
+                Quick Actions
+              </Text>
+              
+              <TouchableOpacity
+                style={[
+                  styles.notificationActionButton,
+                  notificationLoading && { opacity: 0.5 }
+                ]}
+                onPress={handleTestNotification}
+                disabled={notificationLoading}
+              >
+                <Text style={{ fontSize: 20, marginRight: 12 }}>🧪</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 16, fontWeight: '500', color: '#111827' }}>
+                    Send Test Notification
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#6B7280' }}>
+                    Check if notifications are working
+                  </Text>
+                </View>
+                {notificationLoading && <ActivityIndicator size="small" color="#6B7280" />}
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[
+                  styles.notificationActionButton,
+                  notificationLoading && { opacity: 0.5 }
+                ]}
+                onPress={handleSyncNotifications}
+                disabled={notificationLoading}
+              >
+                <Text style={{ fontSize: 20, marginRight: 12 }}>🔄</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 16, fontWeight: '500', color: '#111827' }}>
+                    Sync All Reminders
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#6B7280' }}>
+                    Update all habit reminders
+                  </Text>
+                </View>
+                {notificationLoading && <ActivityIndicator size="small" color="#6B7280" />}
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[
+                  {
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    padding: 12,
+                    backgroundColor: '#FEF2F2',
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: '#FECACA',
+                  },
+                  notificationLoading && { opacity: 0.5 }
+                ]}
+                onPress={handleClearNotifications}
+                disabled={notificationLoading}
+              >
+                <Text style={{ fontSize: 20, marginRight: 12 }}>🗑️</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 16, fontWeight: '500', color: '#DC2626' }}>
+                    Clear All Reminders
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#B91C1C' }}>
+                    Cancel all scheduled notifications
+                  </Text>
+                </View>
+                {notificationLoading && <ActivityIndicator size="small" color="#DC2626" />}
+              </TouchableOpacity>
+            </View>
+
+            {/* Habits with Reminders */}
+            {habits.filter(h => h.reminderTime).length > 0 && (
+              <View style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: 12,
+                padding: 20,
+                borderWidth: 1,
+                borderColor: '#E5E7EB',
+              }}>
+                <Text style={{
+                  fontSize: 18,
+                  fontWeight: '600',
+                  color: '#111827',
+                  marginBottom: 16,
+                }}>
+                  Habits with Reminders
+                </Text>
+                
+                {habits
+                  .filter(h => h.reminderTime && !h.isArchived)
+                  .map((habit, index) => (
+                    <View
+                      key={habit._id}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        paddingVertical: 8,
+                        borderBottomWidth: index < habits.filter(h => h.reminderTime && !h.isArchived).length - 1 ? 1 : 0,
+                        borderBottomColor: '#F3F4F6',
+                      }}
+                    >
+                      <View style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 4,
+                        backgroundColor: habit.color || '#3B82F6',
+                        marginRight: 8,
+                      }} />
+                      <Text style={{
+                        fontSize: 14,
+                        color: '#374151',
+                        flex: 1,
+                      }}>
+                        {habit.name}
+                      </Text>
+                      <Text style={{
+                        fontSize: 12,
+                        color: '#6B7280',
+                        fontWeight: '500',
+                      }}>
+                        🔔 {habit.reminderTime}
+                      </Text>
+                    </View>
+                  ))}
+              </View>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
       {/* Settings Modal */}
       <Modal visible={showSettings} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={{ flex: 1, backgroundColor: '#F9FAFB' }}>
@@ -596,7 +1112,7 @@ export default function ProfileScreen() {
             <TouchableOpacity onPress={() => setShowSettings(false)}>
               <Text style={styles.modalCancel}>Close</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Settings</Text>
+            <Text style={styles.modalTitle}>App Settings</Text>
             <View style={{ width: 50 }} />
           </View>
           
@@ -720,6 +1236,9 @@ function HabitManageCard({ habit, onArchive, onDelete }) {
       <View style={styles.habitStats}>
         <Text style={styles.habitStat}>Streak: {habit.streak || 0} days</Text>
         <Text style={styles.habitStat}>Total: {habit.totalCompletions || 0}</Text>
+        {habit.reminderTime && (
+          <Text style={styles.habitStat}>🔔 {habit.reminderTime}</Text>
+        )}
       </View>
       
       <View style={styles.habitActions}>
@@ -907,6 +1426,16 @@ const styles = {
     fontSize: 16,
     backgroundColor: '#FFFFFF',
     color: '#111827',
+  },
+  
+  // Notification action button
+  notificationActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    marginBottom: 12,
   },
   
   // Habit management styles

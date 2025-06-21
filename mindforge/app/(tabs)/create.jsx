@@ -1,3 +1,4 @@
+// mindforge/app/(tabs)/create.jsx - Complete version with notification integration
 import { 
   Text, 
   View, 
@@ -14,6 +15,7 @@ import { useState, useEffect, useCallback } from "react";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { api } from '../../services/api';
+import { notificationService } from '../../services/notifications';
 
 export default function CreateHabitScreen() {
   const [formData, setFormData] = useState({
@@ -31,6 +33,7 @@ export default function CreateHabitScreen() {
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showTimeHelper, setShowTimeHelper] = useState(false);
   const [formErrors, setFormErrors] = useState({});
+  const [notificationSettings, setNotificationSettings] = useState(null);
 
   // Enhanced categories with descriptions and recommendations
   const categories = [
@@ -173,6 +176,7 @@ export default function CreateHabitScreen() {
   // Fetch existing habits and stats for smart suggestions
   useEffect(() => {
     fetchUserData();
+    loadNotificationSettings();
   }, []);
 
   const fetchUserData = async () => {
@@ -191,6 +195,15 @@ export default function CreateHabitScreen() {
       }
     } catch (error) {
       console.error('❌ Error fetching user data:', error);
+    }
+  };
+
+  const loadNotificationSettings = async () => {
+    try {
+      const settings = await notificationService.getNotificationSettings();
+      setNotificationSettings(settings);
+    } catch (error) {
+      console.error('❌ Error loading notification settings:', error);
     }
   };
 
@@ -260,10 +273,31 @@ export default function CreateHabitScreen() {
       });
 
       if (response.success) {
+        const newHabit = response.data.habit;
+        
+        // Schedule notification if reminder time is set
+        if (newHabit.reminderTime) {
+          try {
+            console.log('🔔 Scheduling notification for new habit...');
+            const notificationId = await notificationService.scheduleHabitReminder(newHabit);
+            
+            if (notificationId) {
+              console.log('✅ Notification scheduled successfully');
+            } else {
+              console.log('⚠️ Failed to schedule notification - may need to enable permissions');
+            }
+          } catch (notificationError) {
+            console.error('❌ Error scheduling notification:', notificationError);
+            // Don't fail the habit creation if notification fails
+          }
+        }
+
         // Success feedback with options
         Alert.alert(
           '🎉 Habit Created!',
-          `"${formData.name}" has been added to your daily habits.`,
+          `"${formData.name}" has been added to your daily habits.${
+            formData.reminderTime ? `\n🔔 Daily reminders set for ${formData.reminderTime}` : ''
+          }`,
           [
             {
               text: 'Create Another',
@@ -340,6 +374,84 @@ export default function CreateHabitScreen() {
     const suggestions = ['07:00', '09:00', '12:00', '18:00', '20:00'];
     return suggestions.find(time => !existingTimes.includes(time)) || '';
   };
+
+  // Notification status card component
+  function NotificationStatusCard() {
+    if (!notificationSettings) return null;
+
+    return (
+      <View style={{
+        backgroundColor: notificationSettings.permissions === 'granted' ? '#ECFDF5' : '#FEF2F2',
+        borderColor: notificationSettings.permissions === 'granted' ? '#D1FAE5' : '#FECACA',
+        borderWidth: 1,
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 16,
+      }}>
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+        }}>
+          <Text style={{ fontSize: 16, marginRight: 8 }}>
+            {notificationSettings.permissions === 'granted' ? '🔔' : '🔕'}
+          </Text>
+          <Text style={{
+            fontSize: 14,
+            color: notificationSettings.permissions === 'granted' ? '#047857' : '#DC2626',
+            fontWeight: '500',
+            flex: 1,
+          }}>
+            {notificationSettings.permissions === 'granted' 
+              ? 'Notifications enabled - You\'ll receive daily reminders' 
+              : 'Notifications disabled - Enable in Settings to get reminders'
+            }
+          </Text>
+        </View>
+        
+        {notificationSettings.permissions !== 'granted' && (
+          <TouchableOpacity 
+            style={{ 
+              marginTop: 8,
+              backgroundColor: '#FFFFFF',
+              padding: 8,
+              borderRadius: 6,
+              borderWidth: 1,
+              borderColor: '#FECACA',
+            }}
+            onPress={() => {
+              Alert.alert(
+                'Enable Notifications',
+                'To receive habit reminders, please enable notifications in your device Settings.',
+                [
+                  { text: 'Later', style: 'cancel' },
+                  { 
+                    text: 'How to Enable',
+                    onPress: () => {
+                      Alert.alert(
+                        'Enable Notifications',
+                        Platform.OS === 'ios' 
+                          ? 'Go to Settings > Notifications > MindForge and turn on notifications.'
+                          : 'Go to Settings > Apps > MindForge > Notifications and enable notifications.'
+                      );
+                    }
+                  }
+                ]
+              );
+            }}
+          >
+            <Text style={{
+              fontSize: 12,
+              color: '#DC2626',
+              fontWeight: '500',
+              textAlign: 'center',
+            }}>
+              🔔 Tap for instructions to enable notifications
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#F9FAFB' }} edges={['top', 'bottom', 'left', 'right']}>
@@ -429,7 +541,12 @@ export default function CreateHabitScreen() {
             )}
           </View>
 
-          <View style={{ padding: 20 }}>
+          {/* Notification Status */}
+          <View style={{ padding: 20, paddingBottom: 0 }}>
+            <NotificationStatusCard />
+          </View>
+
+          <View style={{ padding: 20, paddingTop: 0 }}>
             
             {/* Suggestions */}
             {getSuggestions().length > 0 && (

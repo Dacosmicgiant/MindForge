@@ -1,4 +1,4 @@
-package com.thecosmicgiant.mindforge
+package com.mindforge.habittracker
 
 import android.app.Application
 import android.content.res.Configuration

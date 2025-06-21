@@ -1,3 +1,4 @@
+// mindforge/app/(tabs)/index.jsx - Fixed version to prevent multiple scheduling
 import { 
   Text, 
   View, 
@@ -11,6 +12,7 @@ import { useState, useEffect, useCallback } from "react";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { api } from '../../services/api';
+import { notificationService, celebrateCompletion, notifyStreak } from '../../services/notifications';
 
 export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
@@ -19,6 +21,9 @@ export default function DashboardScreen() {
   const [stats, setStats] = useState({});
   const [userData, setUserData] = useState(null);
   const [error, setError] = useState(null);
+  const [notificationsReady, setNotificationsReady] = useState(false);
+  const [notificationSettings, setNotificationSettings] = useState(null);
+  const [notificationsInitialized, setNotificationsInitialized] = useState(false); // Track if notifications are already set up
 
   // Fetch all dashboard data
   const fetchDashboardData = useCallback(async () => {
@@ -59,6 +64,72 @@ export default function DashboardScreen() {
     }
   }, []);
 
+  // Initialize notifications ONLY ONCE when the app starts
+  useEffect(() => {
+    const initNotifications = async () => {
+      if (notificationsInitialized) {
+        console.log('ℹ️ Notifications already initialized, skipping...');
+        return;
+      }
+
+      try {
+        console.log('🔔 Initializing notifications for the first time...');
+        const isReady = await notificationService.initialize();
+        setNotificationsReady(isReady);
+        
+        // Load notification settings
+        const settings = await notificationService.getNotificationSettings();
+        setNotificationSettings(settings);
+        
+        // Mark as initialized to prevent future initializations
+        setNotificationsInitialized(true);
+        
+        console.log('✅ One-time notification initialization complete');
+      } catch (error) {
+        console.error('❌ Error initializing notifications:', error);
+      }
+    };
+
+    initNotifications();
+  }, []); // Empty dependency array - only run once
+
+  // Sync notifications with habits ONLY when habits change significantly
+  useEffect(() => {
+    const syncNotifications = async () => {
+      if (!notificationsReady || !notificationsInitialized || habits.length === 0) {
+        return;
+      }
+
+      try {
+        // Only sync if we have habits with reminder times
+        const habitsWithReminders = habits.filter(h => h.reminderTime && h.isActive && !h.isArchived);
+        
+        if (habitsWithReminders.length > 0) {
+          console.log('🔄 Syncing notifications with habits (one-time)...');
+          
+          // Clear any duplicate notifications first
+          await notificationService.clearDuplicateNotifications();
+          
+          // Schedule all reminders
+          await notificationService.scheduleAllHabitReminders(habits);
+          
+          // Refresh notification settings
+          const settings = await notificationService.getNotificationSettings();
+          setNotificationSettings(settings);
+          
+          console.log('✅ Notifications synced successfully');
+        }
+      } catch (error) {
+        console.error('❌ Error syncing notifications:', error);
+      }
+    };
+
+    // Only sync once when habits are first loaded
+    if (habits.length > 0 && notificationsReady && !loading) {
+      syncNotifications();
+    }
+  }, [habits.length, notificationsReady, loading]); // Only trigger when habits count changes
+
   // Initial load
   useEffect(() => {
     const loadDashboard = async () => {
@@ -69,14 +140,25 @@ export default function DashboardScreen() {
     loadDashboard();
   }, [fetchDashboardData]);
 
-  // Pull to refresh
+  // Pull to refresh - DON'T re-sync notifications
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchDashboardData();
+    
+    // Only refresh notification settings, don't re-schedule
+    if (notificationsReady) {
+      try {
+        const settings = await notificationService.getNotificationSettings();
+        setNotificationSettings(settings);
+      } catch (error) {
+        console.error('❌ Error refreshing notification settings:', error);
+      }
+    }
+    
     setRefreshing(false);
-  }, [fetchDashboardData]);
+  }, [fetchDashboardData, notificationsReady]);
 
-  // Toggle habit completion
+  // Toggle habit completion with notification integration
   const handleToggleHabit = async (habitId, currentStatus) => {
     try {
       console.log(`🔄 Toggling habit ${habitId}, current status:`, currentStatus);
@@ -90,14 +172,42 @@ export default function DashboardScreen() {
       if (response.success) {
         console.log('✅ Habit toggled successfully');
         
+        const updatedHabit = response.data.habit;
+        const habit = habits.find(h => h._id === habitId);
+        
         // Update local state immediately for better UX
         setHabits(prevHabits => 
-          prevHabits.map(habit => 
-            habit._id === habitId 
-              ? { ...habit, completedToday: !currentStatus }
-              : habit
+          prevHabits.map(h => 
+            h._id === habitId 
+              ? { 
+                  ...h, 
+                  completedToday: !currentStatus,
+                  streak: updatedHabit.streak || h.streak,
+                  totalCompletions: updatedHabit.totalCompletions || h.totalCompletions
+                }
+              : h
           )
         );
+
+        // Send celebration notification if habit was completed
+        if (!currentStatus && notificationsReady && habit) {
+          try {
+            // Celebrate completion
+            await celebrateCompletion(habit);
+            
+            // Check for streak milestones
+            const newStreak = updatedHabit.streak || 0;
+            const previousStreak = habit.streak || 0;
+            
+            // Only notify if we hit a new milestone (not if going backwards)
+            if (newStreak > previousStreak && [7, 14, 30, 50, 100].includes(newStreak)) {
+              await notifyStreak(habit, newStreak);
+            }
+          } catch (notificationError) {
+            console.error('❌ Error sending celebration notification:', notificationError);
+            // Don't fail the habit toggle if notification fails
+          }
+        }
 
         // Refresh stats to get updated counts
         const statsResponse = await api.getHabitStats();
@@ -153,6 +263,163 @@ export default function DashboardScreen() {
     if (habits.length === 0) return 0;
     return Math.max(...habits.map(habit => habit.streak || 0), 0);
   };
+
+  // Notification status badge component
+  function NotificationStatusBadge() {
+    if (!notificationSettings || notificationSettings.permissions === 'granted') return null;
+
+    return (
+      <TouchableOpacity
+        style={{
+          backgroundColor: '#FEF2F2',
+          borderColor: '#FECACA',
+          borderWidth: 1,
+          paddingHorizontal: 12,
+          paddingVertical: 6,
+          borderRadius: 6,
+          marginTop: 8,
+        }}
+        onPress={() => {
+          Alert.alert(
+            'Enable Notifications',
+            'Get reminded about your daily habits by enabling notifications in your device Settings.',
+            [
+              { text: 'Later', style: 'cancel' },
+              { 
+                text: 'How to Enable', 
+                onPress: () => {
+                  Alert.alert(
+                    'Enable Notifications',
+                    Platform.OS === 'ios' 
+                      ? 'Go to Settings > Notifications > MindForge and turn on notifications.'
+                      : 'Go to Settings > Apps > MindForge > Notifications and enable notifications.'
+                  );
+                }
+              }
+            ]
+          );
+        }}
+      >
+        <Text style={{
+          fontSize: 12,
+          color: '#DC2626',
+          fontWeight: '500',
+          textAlign: 'center',
+        }}>
+          🔕 Tap to enable habit reminders
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+
+  // Notification sync status component - FIXED to not trigger scheduling
+  function NotificationSyncStatus() {
+    const [syncStatus, setSyncStatus] = useState('checking');
+
+    useEffect(() => {
+      const checkSync = async () => {
+        if (!notificationsReady || !notificationSettings) {
+          setSyncStatus('disabled');
+          return;
+        }
+
+        const habitsWithReminders = habits.filter(h => h.reminderTime && h.isActive && !h.isArchived);
+        
+        if (habitsWithReminders.length > 0) {
+          if (notificationSettings.scheduledCount >= habitsWithReminders.length) {
+            setSyncStatus('synced');
+          } else {
+            setSyncStatus('needs_sync');
+          }
+        } else {
+          setSyncStatus('none');
+        }
+      };
+
+      if (habits.length > 0) {
+        checkSync();
+      }
+    }, [habits, notificationsReady, notificationSettings]);
+
+    const getStatusInfo = () => {
+      switch (syncStatus) {
+        case 'synced':
+          return { icon: '🔔', text: 'Reminders active', color: '#10B981' };
+        case 'needs_sync':
+          return { icon: '⚠️', text: 'Needs sync', color: '#F59E0B' };
+        case 'disabled':
+          return { icon: '🔕', text: 'Reminders off', color: '#6B7280' };
+        case 'none':
+          return { icon: '💡', text: 'Add reminder times', color: '#6B7280' };
+        default:
+          return { icon: '⏳', text: 'Checking...', color: '#6B7280' };
+      }
+    };
+
+    const statusInfo = getStatusInfo();
+    const habitsWithReminders = habits.filter(h => h.reminderTime);
+
+    if (syncStatus === 'none') return null;
+
+    return (
+      <View style={{
+        backgroundColor: '#F9FAFB',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 6,
+        marginTop: 8,
+        alignItems: 'center',
+      }}>
+        <Text style={{
+          fontSize: 11,
+          color: statusInfo.color,
+          fontWeight: '500',
+        }}>
+          {statusInfo.icon} {statusInfo.text}
+        </Text>
+        <Text style={{
+          fontSize: 10,
+          color: '#9CA3AF',
+          marginTop: 2,
+        }}>
+          {habitsWithReminders.length} habit{habitsWithReminders.length !== 1 ? 's' : ''} with reminders
+        </Text>
+        
+        {/* Manual sync button for needs_sync status */}
+        {syncStatus === 'needs_sync' && (
+          <TouchableOpacity
+            style={{
+              backgroundColor: '#F59E0B',
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 4,
+              marginTop: 4,
+            }}
+            onPress={async () => {
+              try {
+                setSyncStatus('syncing');
+                await notificationService.scheduleAllHabitReminders(habits);
+                const settings = await notificationService.getNotificationSettings();
+                setNotificationSettings(settings);
+                setSyncStatus('synced');
+              } catch (error) {
+                console.error('❌ Error manual sync:', error);
+                setSyncStatus('needs_sync');
+              }
+            }}
+          >
+            <Text style={{
+              fontSize: 10,
+              color: '#FFFFFF',
+              fontWeight: '500',
+            }}>
+              Sync Now
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
 
   // Loading state
   if (loading) {
@@ -210,6 +477,9 @@ export default function DashboardScreen() {
               day: 'numeric' 
             })}
           </Text>
+          
+          {/* Notification Status Badge */}
+          <NotificationStatusBadge />
         </View>
 
         {/* Error Message */}
@@ -304,6 +574,9 @@ export default function DashboardScreen() {
                 {stats.weeklyCompletionRate}%
               </Text>
             </View>
+            
+            {/* Notification Sync Status */}
+            <NotificationSyncStatus />
           </View>
         )}
 
@@ -545,9 +818,18 @@ function HabitItem({ habit, onToggle }) {
             <Text style={{
               fontSize: 10,
               color: '#9CA3AF',
+              marginRight: 8,
             }}>
               {difficultyIndicators[habit.difficulty] || '●'}
             </Text>
+            {habit.reminderTime && (
+              <Text style={{
+                fontSize: 10,
+                color: '#9CA3AF',
+              }}>
+                🔔 {habit.reminderTime}
+              </Text>
+            )}
           </View>
 
           {/* Streak indicator */}
